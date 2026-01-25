@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode } from 'react';
 import { ChatMessage as ChatMessageType } from '@/types/database';
 
 interface ChatMessageProps {
@@ -20,7 +21,7 @@ function getUrlDisplayName(url: string): string {
 function renderContentWithLinks(content: string, isUser: boolean) {
   // Match markdown links [text](url) or plain URLs
   const linkRegex = /\[([^\]]+)\]\(([^)]+)\)|(https?:\/\/[^\s]+)/g;
-  const parts: (string | JSX.Element)[] = [];
+  const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match;
 

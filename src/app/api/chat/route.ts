@@ -151,23 +151,33 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
     // Extract source URLs from grounding metadata if available
     const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
     if (groundingMetadata?.groundingChunks?.length) {
-      const sources = groundingMetadata.groundingChunks
-        .filter((chunk: { web?: { uri?: string; title?: string } }) => chunk.web?.uri)
-        .map((chunk: { web?: { uri?: string; title?: string } }) => ({
-          url: chunk.web!.uri,
-          title: chunk.web!.title || new URL(chunk.web!.uri!).hostname.replace('www.', ''),
-        }));
+      const sources: { url: string; title: string }[] = [];
+
+      for (const chunk of groundingMetadata.groundingChunks) {
+        const webChunk = chunk as { web?: { uri?: string; title?: string } };
+        if (webChunk.web?.uri) {
+          const url = webChunk.web.uri;
+          let title = webChunk.web.title;
+          if (!title) {
+            try {
+              title = new URL(url).hostname.replace('www.', '');
+            } catch {
+              title = 'Link';
+            }
+          }
+          sources.push({ url, title });
+        }
+      }
 
       // Deduplicate by title/domain
       const uniqueSources = sources.filter(
-        (source: { url: string; title: string }, index: number, self: { url: string; title: string }[]) =>
-          index === self.findIndex((s) => s.title === source.title)
+        (source, index, self) => index === self.findIndex((s) => s.title === source.title)
       );
 
       if (uniqueSources.length > 0) {
         assistantMessage += '\n\nSources:\n' + uniqueSources
           .slice(0, 5) // Limit to 5 sources
-          .map((s: { url: string; title: string }) => `[${s.title}](${s.url})`)
+          .map((s) => `[${s.title}](${s.url})`)
           .join('\n');
       }
     }
