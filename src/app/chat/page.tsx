@@ -1,5 +1,9 @@
 'use client';
 
+// Force dynamic rendering to prevent static generation during build
+// (Supabase client requires env vars that aren't available at build time)
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ChatMessage as ChatMessageType, ChatSession } from '@/types/database';
