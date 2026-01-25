@@ -1,0 +1,124 @@
+import { Motorcycle } from '@/types/database';
+import Papa from 'papaparse';
+
+export interface ExportOptions {
+  includeInactive: boolean;
+  encodeStatusInNotes: boolean;
+}
+
+export interface ExportRow {
+  name: string;
+  make: string;
+  model: string;
+  year: string;
+  vehicle_type: string;
+  vin: string;
+  plate_number: string;
+  mileage: string;
+  tab_expiration: string;
+  status: string;
+  notes: string;
+  purchase_price: string;
+  purchase_date: string;
+  nickname: string;
+}
+
+const isActiveStatus = (status: string): boolean => {
+  return status === 'active' || status === 'maintenance';
+};
+
+export function formatVehicleForExport(
+  vehicle: Motorcycle,
+  options: ExportOptions
+): ExportRow {
+  let notes = vehicle.notes || '';
+
+  // Encode status in notes for re-import compatibility
+  if (options.encodeStatusInNotes && vehicle.status !== 'active') {
+    const statusPrefix = vehicle.status.toUpperCase();
+    let saleDetails = '';
+
+    if (vehicle.sale_info) {
+      if (vehicle.sale_info.date) {
+        saleDetails += ` ${vehicle.sale_info.date}`;
+      }
+      if (vehicle.sale_info.amount) {
+        saleDetails += ` $${vehicle.sale_info.amount.toLocaleString()}`;
+      }
+    }
+
+    notes = `${statusPrefix}${saleDetails}${notes ? ' - ' + notes : ''}`;
+  }
+
+  return {
+    name: vehicle.name || '',
+    make: vehicle.make || '',
+    model: vehicle.model || '',
+    year: vehicle.year?.toString() || '',
+    vehicle_type: vehicle.vehicle_type || 'motorcycle',
+    vin: vehicle.vin || '',
+    plate_number: vehicle.plate_number || '',
+    mileage: vehicle.mileage || '',
+    tab_expiration: vehicle.tab_expiration || '',
+    status: vehicle.status || 'active',
+    notes: notes,
+    purchase_price: vehicle.purchase_price?.toString() || '',
+    purchase_date: vehicle.purchase_date || '',
+    nickname: vehicle.nickname || '',
+  };
+}
+
+export function filterVehiclesForExport(
+  vehicles: Motorcycle[],
+  options: ExportOptions
+): Motorcycle[] {
+  if (options.includeInactive) {
+    return vehicles;
+  }
+  return vehicles.filter((v) => isActiveStatus(v.status));
+}
+
+export function generateCSV(
+  vehicles: Motorcycle[],
+  options: ExportOptions
+): string {
+  const filtered = filterVehiclesForExport(vehicles, options);
+  const rows = filtered.map((v) => formatVehicleForExport(v, options));
+
+  return Papa.unparse(rows, {
+    header: true,
+    columns: [
+      'name',
+      'make',
+      'model',
+      'year',
+      'vehicle_type',
+      'vin',
+      'plate_number',
+      'mileage',
+      'tab_expiration',
+      'status',
+      'notes',
+      'purchase_price',
+      'purchase_date',
+      'nickname',
+    ],
+  });
+}
+
+export function downloadCSV(csv: string, filename: string = 'vehicles-export.csv'): void {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export function getExportFilename(): string {
+  const date = new Date().toISOString().split('T')[0];
+  return `vehicles-export-${date}.csv`;
+}
