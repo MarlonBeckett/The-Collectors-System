@@ -201,13 +201,13 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
         <label className="block text-sm font-medium mb-2">
           Vehicle Type
         </label>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {vehicleTypes.map((type) => (
             <button
               key={type.value}
               type="button"
               onClick={() => setVehicleType(type.value)}
-              className={`py-3 px-2 text-sm font-medium transition-colors ${
+              className={`min-h-[44px] py-3 px-2 text-sm font-medium transition-colors ${
                 vehicleType === type.value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:text-foreground border border-border'
@@ -220,7 +220,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
       </div>
 
       {/* Make, Model, Year - on same row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Make */}
         <div>
           <label htmlFor="make" className="block text-sm font-medium mb-2">
@@ -349,7 +349,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
         <label htmlFor="mileage" className="block text-sm font-medium mb-2">
           {mode === 'edit' ? 'Update Mileage' : 'Mileage'}
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input
             id="mileage"
             type="text"
@@ -378,7 +378,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
         <label htmlFor="purchasePrice" className="block text-sm font-medium mb-2">
           Purchase Price
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
             <input
@@ -467,7 +467,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
         <button
           type="submit"
           disabled={loading || !name}
-          className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          className="flex-1 min-h-[44px] py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
           {loading ? 'Saving...' : mode === 'create' ? 'Add Vehicle' : 'Save Changes'}
         </button>
@@ -475,7 +475,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="py-3 px-6 border border-border hover:bg-muted transition-colors"
+          className="min-h-[44px] py-3 px-6 border border-border hover:bg-muted transition-colors"
         >
           Cancel
         </button>

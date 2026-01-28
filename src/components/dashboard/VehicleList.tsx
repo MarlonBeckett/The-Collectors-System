@@ -110,7 +110,7 @@ export function VehicleList({ vehicles }: VehicleListProps) {
         <div className="flex gap-2 mb-3 overflow-x-auto">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            className={`min-h-[44px] px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'all'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
@@ -120,7 +120,7 @@ export function VehicleList({ vehicles }: VehicleListProps) {
           </button>
           <button
             onClick={() => setActiveTab('tabs')}
-            className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            className={`min-h-[44px] px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'tabs'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
@@ -130,7 +130,7 @@ export function VehicleList({ vehicles }: VehicleListProps) {
           </button>
           <button
             onClick={() => setActiveTab('maintenance')}
-            className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
+            className={`min-h-[44px] px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === 'maintenance'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
@@ -140,7 +140,7 @@ export function VehicleList({ vehicles }: VehicleListProps) {
           </button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1">
             <SearchBar onSearch={setSearchQuery} />
           </div>

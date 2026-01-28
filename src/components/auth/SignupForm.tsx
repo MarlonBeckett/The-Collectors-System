@@ -78,7 +78,7 @@ export function SignupForm() {
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           required
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="Your name"
         />
       </div>
@@ -93,7 +93,7 @@ export function SignupForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="you@example.com"
         />
       </div>
@@ -109,7 +109,7 @@ export function SignupForm() {
           onChange={(e) => setPassword(e.target.value)}
           required
           minLength={6}
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="At least 6 characters"
         />
       </div>

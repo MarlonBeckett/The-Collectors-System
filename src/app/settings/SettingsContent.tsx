@@ -107,31 +107,33 @@ export function SettingsContent({
           <div>
             <label className="text-sm text-muted-foreground">Display Name</label>
             {editingDisplayName ? (
-              <div className="flex gap-2 mt-1">
+              <div className="flex flex-col sm:flex-row gap-2 mt-1">
                 <input
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Enter display name"
-                  className="flex-1 px-3 py-1.5 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                  className="flex-1 px-3 py-1.5 text-base sm:text-sm bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
                   autoFocus
                 />
-                <button
-                  onClick={handleSaveDisplayName}
-                  disabled={savingDisplayName || !displayName.trim()}
-                  className="px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
-                >
-                  {savingDisplayName ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingDisplayName(false);
-                    setDisplayName(profile?.display_name || '');
-                  }}
-                  className="px-3 py-1.5 border border-border text-sm hover:bg-muted"
-                >
-                  Cancel
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveDisplayName}
+                    disabled={savingDisplayName || !displayName.trim()}
+                    className="min-h-[44px] sm:min-h-0 flex-1 sm:flex-initial px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    {savingDisplayName ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingDisplayName(false);
+                      setDisplayName(profile?.display_name || '');
+                    }}
+                    className="min-h-[44px] sm:min-h-0 flex-1 sm:flex-initial px-3 py-1.5 border border-border text-sm hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -167,30 +169,32 @@ export function SettingsContent({
         {showCreateForm && (
           <div className="bg-card border border-border p-4 mb-4">
             <h3 className="font-semibold mb-3">Create New Collection</h3>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={newCollectionName}
                 onChange={(e) => setNewCollectionName(e.target.value)}
                 placeholder="Collection name"
-                className="flex-1 px-4 py-2 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                className="flex-1 px-4 py-2 text-base sm:text-sm bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <button
-                onClick={handleCreateCollection}
-                disabled={creating || !newCollectionName.trim()}
-                className="px-4 py-2 bg-primary text-primary-foreground font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                {creating ? 'Creating...' : 'Create'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowCreateForm(false);
-                  setNewCollectionName('');
-                }}
-                className="px-4 py-2 border border-border hover:bg-muted"
-              >
-                Cancel
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateCollection}
+                  disabled={creating || !newCollectionName.trim()}
+                  className="min-h-[44px] sm:min-h-0 flex-1 sm:flex-initial px-4 py-2 bg-primary text-primary-foreground font-medium hover:opacity-90 disabled:opacity-50"
+                >
+                  {creating ? 'Creating...' : 'Create'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setNewCollectionName('');
+                  }}
+                  className="min-h-[44px] sm:min-h-0 flex-1 sm:flex-initial px-4 py-2 border border-border hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

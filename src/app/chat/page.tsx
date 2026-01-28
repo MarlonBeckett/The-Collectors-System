@@ -173,7 +173,7 @@ export default function ChatPage() {
 
   return (
     <AppShell>
-      <div className="flex h-[calc(100vh-8rem)] w-full relative">
+      <div className="flex h-[calc(100dvh-8rem)] w-full relative">
         {/* Sidebar Overlay */}
         {sidebarOpen && (
           <div
@@ -322,7 +322,7 @@ export default function ChatPage() {
           </div>
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-border">
+          <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-border pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -330,12 +330,12 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about your collection..."
                 disabled={loading}
-                className="flex-1 px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className="flex-1 px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="px-4 py-3 bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="min-h-[44px] px-4 py-3 bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PaperAirplaneIcon className="w-5 h-5" />
               </button>

@@ -56,7 +56,7 @@ export function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="you@example.com"
         />
       </div>
@@ -71,7 +71,7 @@ export function LoginForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="Your password"
         />
       </div>

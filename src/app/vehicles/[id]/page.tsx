@@ -121,20 +121,23 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
 
           {/* Key Information */}
           <div className="grid gap-4">
-            {/* Plate Number */}
-            <div className="bg-card border border-border p-4">
-              <h2 className="text-sm font-medium text-muted-foreground mb-1">Plate Number</h2>
-              <p className="text-2xl font-mono font-bold tracking-wider">
-                {vehicle.plate_number || '—'}
-              </p>
-            </div>
+            {/* Plate Number & VIN - side by side on larger screens */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Plate Number */}
+              <div className="bg-card border border-border p-4">
+                <h2 className="text-sm font-medium text-muted-foreground mb-1">Plate Number</h2>
+                <p className="text-2xl font-mono font-bold tracking-wider">
+                  {vehicle.plate_number || '—'}
+                </p>
+              </div>
 
-            {/* VIN */}
-            <div className="bg-card border border-border p-4">
-              <h2 className="text-sm font-medium text-muted-foreground mb-1">VIN</h2>
-              <p className="text-lg font-mono tracking-wide break-all">
-                {vehicle.vin || '—'}
-              </p>
+              {/* VIN */}
+              <div className="bg-card border border-border p-4 min-w-0">
+                <h2 className="text-sm font-medium text-muted-foreground mb-1">VIN</h2>
+                <p className="text-lg font-mono tracking-wide break-all overflow-hidden">
+                  {vehicle.vin || '—'}
+                </p>
+              </div>
             </div>
 
             {/* Mileage - with update button */}

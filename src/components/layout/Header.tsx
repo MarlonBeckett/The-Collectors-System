@@ -41,7 +41,8 @@ export function Header() {
     <header className="sticky top-0 z-50 bg-card border-b border-border">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="font-bold text-xl text-foreground">
-          The Collectors System
+          <span className="sm:hidden">TCS</span>
+          <span className="hidden sm:inline">The Collectors System</span>
         </Link>
 
         <div className="flex items-center gap-2">

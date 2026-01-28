@@ -110,3 +110,17 @@ body {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* Prevent iOS auto-zoom on input focus (requires >= 16px font) */
+@media screen and (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
+/* Safe area support for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
