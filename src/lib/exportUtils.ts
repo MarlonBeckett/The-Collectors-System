@@ -18,8 +18,10 @@ export interface ExportRow {
   tab_expiration: string;
   status: string;
   notes: string;
+  maintenance_notes: string;
   purchase_price: string;
   purchase_date: string;
+  estimated_value: string;
   nickname: string;
 }
 
@@ -62,8 +64,10 @@ export function formatVehicleForExport(
     tab_expiration: vehicle.tab_expiration || '',
     status: vehicle.status || 'active',
     notes: notes,
+    maintenance_notes: vehicle.maintenance_notes || '',
     purchase_price: vehicle.purchase_price?.toString() || '',
     purchase_date: vehicle.purchase_date || '',
+    estimated_value: vehicle.estimated_value?.toString() || '',
     nickname: vehicle.nickname || '',
   };
 }
@@ -99,8 +103,10 @@ export function generateCSV(
       'tab_expiration',
       'status',
       'notes',
+      'maintenance_notes',
       'purchase_price',
       'purchase_date',
+      'estimated_value',
       'nickname',
     ],
   });

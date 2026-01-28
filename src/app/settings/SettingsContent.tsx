@@ -220,6 +220,7 @@ export function SettingsContent({
                 members={[]}
                 isOwner={true}
                 onUpdate={handleUpdate}
+                totalCollections={collections.length}
               />
             ))}
           </div>
@@ -234,25 +235,35 @@ export function SettingsContent({
             {joinedCollections.map((collection) => {
               const ownerName = collection.owner_display_name || collection.owner_email?.split('@')[0] || 'Someone';
               return (
-                <div key={collection.id} className="bg-card border border-border p-4">
-                  <h3 className="font-semibold">{ownerName}&apos;s Collection</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Shared by {collection.owner_display_name || collection.owner_email || 'unknown'}
-                  </p>
-                  <button
-                    onClick={async () => {
-                      if (!confirm('Are you sure you want to leave this collection?')) return;
-                      await supabase
-                        .from('collection_members')
-                        .delete()
-                        .eq('collection_id', collection.id)
-                        .eq('user_id', user.id);
-                      router.refresh();
-                    }}
-                    className="text-sm text-destructive hover:underline"
-                  >
-                    Leave collection
-                  </button>
+                <div key={collection.id} className="bg-card border border-border overflow-hidden">
+                  {/* Collection Header */}
+                  <div className="px-4 py-3 bg-muted/50 border-b border-border">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-base">{collection.name}</h3>
+                      <span className="text-xs text-muted-foreground">Member</span>
+                    </div>
+                  </div>
+                  {/* Collection Details */}
+                  <div className="px-4 py-3">
+                    <div className="text-sm text-muted-foreground mb-3">
+                      <span className="font-medium text-foreground">Owner:</span>{' '}
+                      {collection.owner_display_name || collection.owner_email || 'Unknown'}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Are you sure you want to leave this collection? You will lose access to all vehicles in this collection.')) return;
+                        await supabase
+                          .from('collection_members')
+                          .delete()
+                          .eq('collection_id', collection.id)
+                          .eq('user_id', user.id);
+                        router.refresh();
+                      }}
+                      className="text-sm text-destructive hover:underline"
+                    >
+                      Leave collection
+                    </button>
+                  </div>
                 </div>
               );
             })}
