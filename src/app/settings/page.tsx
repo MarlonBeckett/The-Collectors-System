@@ -15,6 +15,7 @@ interface UserCollection {
   is_owner: boolean;
   role: string;
   created_at: string;
+  member_count: number;
 }
 
 export default async function SettingsPage() {

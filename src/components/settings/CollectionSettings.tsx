@@ -2,24 +2,26 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Collection, CollectionMember } from '@/types/database';
+import { Collection } from '@/types/database';
+import { MembersModal } from './MembersModal';
 import {
   ClipboardDocumentIcon,
   ArrowPathIcon,
-  UserMinusIcon,
   CheckIcon,
+  TrashIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
 interface CollectionSettingsProps {
   collection: Collection;
-  members: (CollectionMember & { email?: string })[];
+  memberCount: number;
   isOwner: boolean;
   onUpdate: () => void;
 }
 
 export function CollectionSettings({
   collection,
-  members,
+  memberCount,
   isOwner,
   onUpdate,
 }: CollectionSettingsProps) {
@@ -27,7 +29,9 @@ export function CollectionSettings({
   const [regenerating, setRegenerating] = useState(false);
   const [joinCode, setJoinCode] = useState(collection.join_code);
   const [leaving, setLeaving] = useState(false);
-  const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [currentMemberCount, setCurrentMemberCount] = useState(memberCount);
 
   const supabase = createClient();
 
@@ -42,7 +46,6 @@ export function CollectionSettings({
 
     setRegenerating(true);
     try {
-      // Generate new code
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let newCode = '';
       for (let i = 0; i < 6; i++) {
@@ -86,136 +89,136 @@ export function CollectionSettings({
     }
   };
 
-  const removeMember = async (memberId: string) => {
+  const deleteCollection = async () => {
     if (!isOwner) return;
 
-    if (!confirm('Are you sure you want to remove this member?')) {
-      return;
-    }
+    const confirmed = confirm(
+      'WARNING: This will permanently delete this collection and ALL vehicles in it. This cannot be undone.\n\nAre you absolutely sure you want to delete this collection?'
+    );
 
-    setRemovingMember(memberId);
+    if (!confirmed) return;
+
+    const doubleConfirmed = confirm(
+      `Type of confirm: You are about to delete "${collection.name}" and all its vehicles. Continue?`
+    );
+
+    if (!doubleConfirmed) return;
+
+    setDeleting(true);
     try {
-      await supabase
-        .from('collection_members')
-        .delete()
-        .eq('collection_id', collection.id)
-        .eq('user_id', memberId);
+      const response = await fetch('/api/collections/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collectionId: collection.id }),
+      });
 
-      onUpdate();
+      if (response.ok) {
+        onUpdate();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to delete collection');
+      }
     } finally {
-      setRemovingMember(null);
+      setDeleting(false);
     }
   };
 
-  const otherMembers = members.filter((m) => m.role !== 'owner');
+  const handleMemberRemoved = () => {
+    setCurrentMemberCount((prev) => Math.max(0, prev - 1));
+    onUpdate();
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Collection Info */}
-      <div className="bg-card border border-border p-4">
-        <h3 className="font-semibold mb-1">{collection.name}</h3>
-        <p className="text-sm text-muted-foreground">
-          {isOwner ? 'You are the owner' : 'You are a member'}
-        </p>
-      </div>
-
-      {/* Join Code */}
-      <div className="bg-card border border-border p-4">
-        <h3 className="font-semibold mb-2">Share Access</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Share this code with others to give them access to your collection
-        </p>
-
-        <div className="flex items-center gap-2">
-          <div className="flex-1 bg-muted p-3 font-mono text-2xl text-center tracking-widest">
-            {joinCode}
+    <>
+      <div className="bg-card border border-border overflow-hidden">
+        {/* Header: Name + Member Count */}
+        <div className="p-4 flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-lg truncate">{collection.name}</h3>
+            {isOwner && (
+              <span className="text-xs text-muted-foreground">Owner</span>
+            )}
           </div>
           <button
-            onClick={copyJoinCode}
-            className="p-3 border border-border hover:bg-muted transition-colors"
-            title="Copy code"
+            onClick={() => setShowMembersModal(true)}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
-            {copied ? (
-              <CheckIcon className="w-5 h-5 text-secondary" />
-            ) : (
-              <ClipboardDocumentIcon className="w-5 h-5" />
-            )}
+            <span>{currentMemberCount} member{currentMemberCount !== 1 ? 's' : ''}</span>
+            <ChevronRightIcon className="w-4 h-4" />
           </button>
-          {isOwner && (
+        </div>
+
+        {/* Share Code Section */}
+        <div className="px-4 pb-4 border-t border-border pt-4">
+          <div className="text-sm text-muted-foreground mb-2">Share Code</div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-muted px-3 py-2 font-mono text-lg tracking-widest text-center">
+              {joinCode}
+            </div>
             <button
-              onClick={regenerateCode}
-              disabled={regenerating}
-              className="p-3 border border-border hover:bg-muted transition-colors disabled:opacity-50"
-              title="Generate new code"
+              onClick={copyJoinCode}
+              className="p-2.5 border border-border hover:bg-muted transition-colors"
+              title="Copy code"
             >
-              <ArrowPathIcon
-                className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`}
-              />
+              {copied ? (
+                <CheckIcon className="w-5 h-5 text-secondary" />
+              ) : (
+                <ClipboardDocumentIcon className="w-5 h-5" />
+              )}
             </button>
+            {isOwner && (
+              <button
+                onClick={regenerateCode}
+                disabled={regenerating}
+                className="p-2.5 border border-border hover:bg-muted transition-colors disabled:opacity-50"
+                title="Generate new code"
+              >
+                <ArrowPathIcon
+                  className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`}
+                />
+              </button>
+            )}
+          </div>
+          {isOwner && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Regenerating invalidates the old code
+            </p>
           )}
         </div>
 
-        {isOwner && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Regenerating the code will invalidate the old one
-          </p>
-        )}
-      </div>
-
-      {/* Members */}
-      <div className="bg-card border border-border p-4">
-        <h3 className="font-semibold mb-2">
-          Members ({members.length})
-        </h3>
-
-        <div className="space-y-2">
-          {members.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center justify-between py-2 border-b border-border last:border-0"
+        {/* Actions */}
+        <div className="px-4 pb-4 flex justify-between items-center">
+          {isOwner ? (
+            <button
+              onClick={deleteCollection}
+              disabled={deleting}
+              className="flex items-center gap-1.5 text-sm text-destructive hover:underline disabled:opacity-50"
             >
-              <div>
-                <span className="text-sm">
-                  {member.email || 'Unknown user'}
-                </span>
-                <span
-                  className={`ml-2 text-xs px-2 py-0.5 rounded ${
-                    member.role === 'owner'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {member.role}
-                </span>
-              </div>
-
-              {isOwner && member.role !== 'owner' && (
-                <button
-                  onClick={() => removeMember(member.user_id)}
-                  disabled={removingMember === member.user_id}
-                  className="p-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50"
-                  title="Remove member"
-                >
-                  <UserMinusIcon className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          ))}
+              <TrashIcon className="w-4 h-4" />
+              {deleting ? 'Deleting...' : 'Delete collection'}
+            </button>
+          ) : (
+            <button
+              onClick={leaveCollection}
+              disabled={leaving}
+              className="text-sm text-destructive hover:underline disabled:opacity-50"
+            >
+              {leaving ? 'Leaving...' : 'Leave collection'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Leave Collection (non-owners only) */}
-      {!isOwner && (
-        <div className="pt-4 border-t border-border">
-          <button
-            onClick={leaveCollection}
-            disabled={leaving}
-            className="text-destructive hover:underline text-sm disabled:opacity-50"
-          >
-            {leaving ? 'Leaving...' : 'Leave this collection'}
-          </button>
-        </div>
+      {/* Members Modal */}
+      {showMembersModal && (
+        <MembersModal
+          collectionId={collection.id}
+          collectionName={collection.name}
+          isOwner={isOwner}
+          onClose={() => setShowMembersModal(false)}
+          onMemberRemoved={handleMemberRemoved}
+        />
       )}
-    </div>
+    </>
   );
 }

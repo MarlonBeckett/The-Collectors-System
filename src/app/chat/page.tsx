@@ -18,6 +18,10 @@ import {
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
 
+// Session storage keys for persisting chat state
+const STORAGE_KEY_SESSION = 'chat_current_session';
+const STORAGE_KEY_DRAFT = 'chat_draft_input';
+
 export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -26,12 +30,45 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
+  // Initialize from session storage
   useEffect(() => {
-    loadSessions();
+    const savedSessionId = sessionStorage.getItem(STORAGE_KEY_SESSION);
+    const savedDraft = sessionStorage.getItem(STORAGE_KEY_DRAFT);
+
+    if (savedDraft) {
+      setInput(savedDraft);
+    }
+
+    // Load sessions, then determine which one to show
+    loadSessions(savedSessionId);
   }, []);
+
+  // Save input to session storage when it changes (for draft preservation)
+  useEffect(() => {
+    if (initialized) {
+      if (input && !currentSessionId) {
+        // Only save draft for new chats
+        sessionStorage.setItem(STORAGE_KEY_DRAFT, input);
+      } else if (!input || currentSessionId) {
+        sessionStorage.removeItem(STORAGE_KEY_DRAFT);
+      }
+    }
+  }, [input, currentSessionId, initialized]);
+
+  // Save current session to storage when it changes
+  useEffect(() => {
+    if (initialized) {
+      if (currentSessionId) {
+        sessionStorage.setItem(STORAGE_KEY_SESSION, currentSessionId);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY_SESSION);
+      }
+    }
+  }, [currentSessionId, initialized]);
 
   useEffect(() => {
     if (currentSessionId) {
@@ -46,7 +83,7 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  const loadSessions = async () => {
+  const loadSessions = async (savedSessionId?: string | null) => {
     const { data } = await supabase
       .from('chat_sessions')
       .select('*')
@@ -54,14 +91,19 @@ export default function ChatPage() {
 
     if (data) {
       setSessions(data);
-      // Auto-select the most recent session if none selected
-      if (data.length > 0 && !currentSessionId) {
-        setCurrentSessionId(data[0].id);
+
+      // Check if there's a saved session that still exists
+      if (savedSessionId && data.some(s => s.id === savedSessionId)) {
+        setCurrentSessionId(savedSessionId);
       }
+      // Otherwise, for first-time visitors, default to new chat (null)
+      // Don't auto-select the most recent session
     }
+
     if (!data || data.length === 0) {
       setLoadingHistory(false);
     }
+    setInitialized(true);
   };
 
   const loadMessages = async (sessionId: string) => {
@@ -102,6 +144,7 @@ export default function ChatPage() {
     if (currentSessionId === sessionId) {
       setCurrentSessionId(null);
       setMessages([]);
+      sessionStorage.removeItem(STORAGE_KEY_SESSION);
     }
 
     await loadSessions();
@@ -113,6 +156,8 @@ export default function ChatPage() {
 
     const userMessage = input.trim();
     setInput('');
+    // Clear draft immediately when submitting
+    sessionStorage.removeItem(STORAGE_KEY_DRAFT);
     setLoading(true);
 
     // Optimistically add user message
@@ -234,7 +279,7 @@ export default function ChatPage() {
                       </div>
                       <button
                         onClick={(e) => handleDeleteSession(session.id, e)}
-                        className="p-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                        className="p-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 rounded transition-opacity"
                       >
                         <TrashIcon className="w-4 h-4" />
                       </button>

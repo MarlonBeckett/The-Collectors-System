@@ -14,8 +14,18 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 
-export function CSVExport() {
-  const [vehicles, setVehicles] = useState<Motorcycle[]>([]);
+interface UserCollection {
+  id: string;
+  name: string;
+  is_owner: boolean;
+}
+
+interface CSVExportProps {
+  collections: UserCollection[];
+}
+
+export function CSVExport({ collections }: CSVExportProps) {
+  const [allVehicles, setAllVehicles] = useState<Motorcycle[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
@@ -23,6 +33,10 @@ export function CSVExport() {
     includeInactive: true,
     encodeStatusInNotes: true,
   });
+
+  // Default to first owned collection, or first collection if none owned
+  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
 
   const supabase = createClient();
 
@@ -36,13 +50,18 @@ export function CSVExport() {
       if (error) {
         console.error('Error fetching vehicles:', error);
       } else {
-        setVehicles(data as Motorcycle[]);
+        setAllVehicles(data as Motorcycle[]);
       }
       setLoading(false);
     }
 
     fetchVehicles();
   }, [supabase]);
+
+  // Filter vehicles by selected collection
+  const vehicles = selectedCollectionId
+    ? allVehicles.filter(v => v.collection_id === selectedCollectionId)
+    : allVehicles;
 
   const activeCount = vehicles.filter(
     (v) => v.status === 'active' || v.status === 'maintenance'
@@ -56,7 +75,10 @@ export function CSVExport() {
 
     try {
       const csv = generateCSV(vehicles, options);
-      const filename = getExportFilename();
+      const selectedCollection = collections.find(c => c.id === selectedCollectionId);
+      const collectionName = selectedCollection?.name.toLowerCase().replace(/\s+/g, '-') || 'vehicles';
+      const date = new Date().toISOString().split('T')[0];
+      const filename = `${collectionName}-export-${date}.csv`;
       downloadCSV(csv, filename);
       setExported(true);
 
@@ -77,7 +99,7 @@ export function CSVExport() {
     );
   }
 
-  if (vehicles.length === 0) {
+  if (allVehicles.length === 0) {
     return (
       <div className="text-center py-8">
         <p className="text-muted-foreground mb-4">No vehicles to export.</p>
@@ -93,6 +115,26 @@ export function CSVExport() {
 
   return (
     <div className="space-y-6">
+      {/* Collection Selector */}
+      {collections.length > 0 && (
+        <div className="bg-card border border-border p-4">
+          <label className="block text-sm font-medium mb-2">
+            Export from Collection
+          </label>
+          <select
+            value={selectedCollectionId}
+            onChange={(e) => setSelectedCollectionId(e.target.value)}
+            className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {collections.map((collection) => (
+              <option key={collection.id} value={collection.id}>
+                {collection.name} {collection.is_owner ? '(Owner)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="bg-card border border-border p-4">
         <h3 className="font-semibold mb-2">Collection Summary</h3>
@@ -166,7 +208,7 @@ export function CSVExport() {
         <div className="text-xs text-muted-foreground">
           <strong>Fields:</strong> name, make, model, year, vehicle_type, vin,
           plate_number, mileage, tab_expiration, status, notes, purchase_price,
-          purchase_date, nickname
+          purchase_date, nickname, maintenance_notes
         </div>
       </div>
 

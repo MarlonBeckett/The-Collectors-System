@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { User } from '@supabase/supabase-js';
-import { Collection, CollectionMember, Profile } from '@/types/database';
+import { Profile } from '@/types/database';
 import { CollectionSettings } from '@/components/settings/CollectionSettings';
 import { JoinCollection } from '@/components/settings/JoinCollection';
 import { createClient } from '@/lib/supabase/client';
@@ -19,6 +19,7 @@ interface UserCollection {
   join_code: string;
   is_owner: boolean;
   role: string;
+  member_count: number;
 }
 
 interface SettingsContentProps {
@@ -217,7 +218,7 @@ export function SettingsContent({
                   join_code: collection.join_code,
                   created_at: '',
                 }}
-                members={[]}
+                memberCount={collection.member_count}
                 isOwner={true}
                 onUpdate={handleUpdate}
               />
@@ -231,31 +232,21 @@ export function SettingsContent({
         <section>
           <h2 className="text-lg font-semibold mb-4">Joined Collections</h2>
           <div className="space-y-4">
-            {joinedCollections.map((collection) => {
-              const ownerName = collection.owner_display_name || collection.owner_email?.split('@')[0] || 'Someone';
-              return (
-                <div key={collection.id} className="bg-card border border-border p-4">
-                  <h3 className="font-semibold">{ownerName}&apos;s Collection</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Shared by {collection.owner_display_name || collection.owner_email || 'unknown'}
-                  </p>
-                  <button
-                    onClick={async () => {
-                      if (!confirm('Are you sure you want to leave this collection?')) return;
-                      await supabase
-                        .from('collection_members')
-                        .delete()
-                        .eq('collection_id', collection.id)
-                        .eq('user_id', user.id);
-                      router.refresh();
-                    }}
-                    className="text-sm text-destructive hover:underline"
-                  >
-                    Leave collection
-                  </button>
-                </div>
-              );
-            })}
+            {joinedCollections.map((collection) => (
+              <CollectionSettings
+                key={collection.id}
+                collection={{
+                  id: collection.id,
+                  name: collection.name,
+                  owner_id: collection.owner_id,
+                  join_code: collection.join_code,
+                  created_at: '',
+                }}
+                memberCount={collection.member_count}
+                isOwner={false}
+                onUpdate={handleUpdate}
+              />
+            ))}
           </div>
         </section>
       )}

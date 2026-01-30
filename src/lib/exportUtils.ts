@@ -21,6 +21,7 @@ export interface ExportRow {
   purchase_price: string;
   purchase_date: string;
   nickname: string;
+  maintenance_notes: string;
 }
 
 const isActiveStatus = (status: string): boolean => {
@@ -65,6 +66,7 @@ export function formatVehicleForExport(
     purchase_price: vehicle.purchase_price?.toString() || '',
     purchase_date: vehicle.purchase_date || '',
     nickname: vehicle.nickname || '',
+    maintenance_notes: vehicle.maintenance_notes || '',
   };
 }
 
@@ -102,6 +104,7 @@ export function generateCSV(
       'purchase_price',
       'purchase_date',
       'nickname',
+      'maintenance_notes',
     ],
   });
 }
