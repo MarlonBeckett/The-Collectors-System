@@ -8,6 +8,7 @@ import {
   SunIcon,
   MoonIcon,
   ArrowRightOnRectangleIcon,
+  ShoppingBagIcon,
 } from '@heroicons/react/24/outline';
 
 export function Header() {
@@ -46,6 +47,14 @@ export function Header() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/purchases"
+            className="p-2 hover:bg-muted transition-colors"
+            aria-label="Purchase history"
+          >
+            <ShoppingBagIcon className="w-5 h-5" />
+          </Link>
+
           <button
             onClick={toggleTheme}
             className="p-2 hover:bg-muted transition-colors"

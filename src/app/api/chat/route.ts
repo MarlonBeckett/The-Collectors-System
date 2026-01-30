@@ -1,8 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { createClient } from '@/lib/supabase/server';
 import { daysUntilExpiration } from '@/lib/dateUtils';
-import { ChatChoiceMetadata, ChatActionMetadata, ChatAction, VehicleFact } from '@/types/database';
+import { ChatChoiceMetadata, ChatActionMetadata, ChatSourcesMetadata, ChatAction, VehicleFact, ChatProduct, ProductTier } from '@/types/database';
+
+// Check if query needs product research (batteries, oil, parts, accessories)
+function needsProductResearch(message: string): boolean {
+  const productKeywords = [
+    'battery', 'batteries', 'oil', 'filter', 'tire', 'tires', 'brake', 'brakes',
+    'chain', 'sprocket', 'spark plug', 'coolant', 'fluid', 'pad', 'pads',
+    'recommendation', 'recommend', 'best', 'which', 'what', 'buy', 'purchase',
+    'replace', 'replacement', 'need', 'looking for', 'suggestions', 'options'
+  ];
+  const messageLower = message.toLowerCase();
+  return productKeywords.some(keyword => messageLower.includes(keyword));
+}
+
+// Extract store name from URL
+function extractStoreFromUrl(url: string): string {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '');
+    const storeMap: Record<string, string> = {
+      'revzilla.com': 'RevZilla',
+      'cyclegear.com': 'Cycle Gear',
+      'denniskirk.com': 'Dennis Kirk',
+      'jpcycles.com': 'J&P Cycles',
+      'rockymountainatvmc.com': 'Rocky Mountain ATV/MC',
+      'motosport.com': 'MotoSport',
+      'partzilla.com': 'Partzilla',
+      'chaparral-racing.com': 'Chaparral',
+      'bikebandit.com': 'BikeBandit',
+      'motomummy.com': 'MotoMummy',
+      'mightymaxbattery.com': 'Mighty Max',
+      'batteriesplus.com': 'Batteries Plus',
+      'batteryclerk.com': 'Battery Clerk',
+      'yuasabatteries.com': 'Yuasa',
+      'shorai.com': 'Shorai',
+      'motobatt.com': 'MotoBatt',
+      'throttlexbatteries.com': 'ThrottleX',
+      'antigravitybatteries.com': 'Antigravity',
+    };
+    return storeMap[hostname] || hostname.replace('.com', '').replace('.net', '');
+  } catch {
+    return 'Store';
+  }
+}
+
+// Check if URL is a product/shopping site (motorcycle-specific retailers preferred)
+function isProductUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '');
+    // Prioritize motorcycle-specific retailers - avoid general retailers with unreliable links
+    const productDomains = [
+      'revzilla.com', 'cyclegear.com', 'denniskirk.com', 'jpcycles.com',
+      'rockymountainatvmc.com', 'motosport.com', 'partzilla.com',
+      'chaparral-racing.com', 'bikebandit.com', 'motomummy.com',
+      'mightymaxbattery.com', 'batteriesplus.com', 'batteryclerk.com',
+      'yuasabatteries.com', 'shorai.com', 'antigravitybatteries.com',
+      'motobatt.com', 'throttlexbatteries.com',
+    ];
+    return productDomains.some(domain => hostname.includes(domain));
+  } catch {
+    return false;
+  }
+}
 
 interface Motorcycle {
   id: string;
@@ -20,28 +82,6 @@ interface Motorcycle {
   maintenance_notes: string | null;
 }
 
-// Parse product syntax from AI response: [PRODUCT: name | url | price | category]
-export function parseProductsFromResponse(text: string): {
-  cleanText: string;
-  products: Array<{ name: string; url: string; price: string; category: string }>;
-} {
-  const productRegex = /\[PRODUCT:\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^\]]+?)\s*\]/g;
-  let cleanText = text;
-  const products: Array<{ name: string; url: string; price: string; category: string }> = [];
-
-  let match;
-  while ((match = productRegex.exec(text)) !== null) {
-    products.push({
-      name: match[1].trim(),
-      url: match[2].trim(),
-      price: match[3].trim(),
-      category: match[4].trim(),
-    });
-    cleanText = cleanText.replace(match[0], '').trim();
-  }
-
-  return { cleanText, products };
-}
 
 // Parse choice syntax from AI response: [CHOICE: question | opt1 | opt2 | opt3]
 function parseChoiceFromResponse(text: string): { cleanText: string; choiceMetadata: ChatChoiceMetadata | null } {
@@ -132,6 +172,137 @@ function parseActionsFromResponse(text: string, vehicles: Motorcycle[]): { clean
     cleanText,
     actionMetadata: actions.length > 0 ? { type: 'action', actions } : null,
   };
+}
+
+// Parse PRODUCT_INFO syntax: [PRODUCT_INFO: Product Name | tier | brief description | price | optional_url]
+interface ParsedProductInfo {
+  name: string;
+  tier: ProductTier;
+  description: string;
+  price: string;
+  url?: string;
+}
+
+function parseProductInfoFromResponse(text: string): { cleanText: string; productInfos: ParsedProductInfo[] } {
+  // Match both 4-part and 5-part (with URL) formats
+  const productInfoRegex = /\[PRODUCT_INFO:\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|\]]+?)(?:\s*\|\s*([^\]]+?))?\]/g;
+  let cleanText = text;
+  const productInfos: ParsedProductInfo[] = [];
+
+  let match;
+  while ((match = productInfoRegex.exec(text)) !== null) {
+    const name = match[1].trim();
+    const tierRaw = match[2].trim().toLowerCase();
+    const description = match[3].trim();
+    const price = match[4].trim();
+    const url = match[5]?.trim();
+
+    // Validate tier
+    const validTiers = ['budget', 'mid-range', 'premium', 'oem'];
+    const tier = validTiers.includes(tierRaw) ? tierRaw as ProductTier : 'mid-range';
+
+    productInfos.push({ name, tier, description, price, url });
+    cleanText = cleanText.replace(match[0], '').trim();
+  }
+
+  // Clean up any double newlines left behind
+  cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
+
+  return { cleanText, productInfos };
+}
+
+// Match AI-provided product info with grounding URLs using fuzzy matching
+function matchProductsWithInfo(
+  groundingProducts: Array<{ name: string; url: string; store: string }>,
+  productInfos: ParsedProductInfo[]
+): ChatProduct[] {
+  const matchedProducts: ChatProduct[] = [];
+  const usedUrls = new Set<string>();
+
+  // Helper to extract significant words from a product name (brand names, model numbers)
+  const getSignificantWords = (name: string): string[] => {
+    return name.toLowerCase()
+      .replace(/[^\w\s-]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !['the', 'and', 'for', 'with', 'battery', 'oil', 'filter'].includes(word));
+  };
+
+  // Try to match each AI-provided product with a grounding URL
+  for (const info of productInfos) {
+    // If AI provided a URL directly, use it
+    if (info.url && info.url.startsWith('http')) {
+      usedUrls.add(info.url);
+      matchedProducts.push({
+        name: info.name,
+        url: info.url,
+        price: info.price,
+        store: extractStoreFromUrl(info.url),
+        tier: info.tier,
+        description: info.description,
+      });
+      continue;
+    }
+
+    // Otherwise, try fuzzy matching with grounding products
+    const infoWords = getSignificantWords(info.name);
+    let bestMatch: { name: string; url: string; store: string } | null = null;
+    let bestScore = 0;
+
+    for (const gp of groundingProducts) {
+      if (usedUrls.has(gp.url)) continue;
+
+      const gpWords = getSignificantWords(gp.name);
+      // Also check the URL for product identifiers
+      const urlWords = getSignificantWords(gp.url.split('/').pop() || '');
+      const allGpWords = [...gpWords, ...urlWords];
+
+      // Count matching significant words
+      const matchingWords = infoWords.filter(w =>
+        allGpWords.some(gw => gw.includes(w) || w.includes(gw))
+      );
+      const score = matchingWords.length / Math.max(infoWords.length, 1);
+
+      if (score > bestScore && score >= 0.25) {
+        bestScore = score;
+        bestMatch = gp;
+      }
+    }
+
+    if (bestMatch) {
+      usedUrls.add(bestMatch.url);
+      matchedProducts.push({
+        name: info.name,
+        url: bestMatch.url,
+        price: info.price,
+        store: bestMatch.store,
+        tier: info.tier,
+        description: info.description,
+      });
+    } else {
+      // No URL match - include with empty url (will become Google Shopping search)
+      matchedProducts.push({
+        name: info.name,
+        url: '',
+        price: info.price,
+        store: '',
+        tier: info.tier,
+        description: info.description,
+      });
+    }
+  }
+
+  // Add any remaining grounding products that weren't matched (without tier info)
+  for (const gp of groundingProducts) {
+    if (!usedUrls.has(gp.url)) {
+      matchedProducts.push({
+        name: gp.name,
+        url: gp.url,
+        store: gp.store,
+      });
+    }
+  }
+
+  return matchedProducts;
 }
 
 // Extract facts from conversation for smart memory
@@ -336,8 +507,6 @@ ${recentPurchases.map(p => {
 - Provide actionable advice, not just information
 - Minimize questions - use context and educated guesses
 - Only ask clarifying questions when there's genuine ambiguity (e.g., incompatible options)
-- Example: "You need an air filter for your 2012 Harley" → Show Harley-specific filters (don't ask "which model?")
-- Example: "Battery died" for unknown vehicle → Ask which vehicle (can't guess without context)
 
 ## Proactive Insights
 When appropriate:
@@ -346,110 +515,132 @@ When appropriate:
 - Warn about common issues for specific year/make/models
 - Recommend preventive maintenance based on mileage milestones
 
-## Example Flows (For Reference)
+## RESPONSE TEMPLATES - USE THESE FOR CONSISTENT OUTPUT
 
-### Example 1: Direct Product Request
-User: "I need a new battery for my TW200"
-Your response: "Your TW200 is a Honda, so you'll want a small sealed battery. Here are some solid options: [PRODUCT: Yuasa YB9-B Battery | https://amazon.com/... | $49.99 | battery] trusted by riders for durability, or [PRODUCT: Shorai LFX14A2-BS12 | https://amazon.com/... | $99.99 | battery] if you want lithium performance. The Yuasa is a safe choice; the Shorai is lighter and better for performance builds. Which interests you?"
-→ Do NOT ask "what type of battery?" - provide options with context
+When responding to questions, follow the appropriate template below. These ensure consistent, complete responses.
 
-### Example 2: Maintenance Suggestion
-User: "My Rebel is running rough"
-Your response: "That could be a few things. First, when's the last time you changed the oil? Is the fuel fresh? If it's been running rough lately with no recent changes, a fuel treatment like Chevron Techron (around $5-8 at auto stores) and a fresh spark plug ($3-10) often help. Want me to find specific options for your Rebel?"
-→ Provide context-specific guidance WITHOUT searching until they show interest
+### TEMPLATE: PRODUCT_RESEARCH (Use for: battery, oil, parts, accessories questions)
 
-### Example 3: Product Search with Minimized Questions
-User: "Should I get Mobil 1 or Castrol for my bike?"
-Your response: "Both are excellent synthetics. Mobil 1 is slightly thinner (better cold starts), Castrol EDGE is slightly thicker (better heat protection). For your TW200, either works great. Here's what's available right now: [PRODUCT: Mobil 1 Synthetic 10W-40 | https://amazon.com/... | $12.99 | motor-oil] or [PRODUCT: Castrol EDGE 10W-40 | https://amazon.com/... | $13.99 | motor-oil]. Go with whatever's cheapest or closest to you."
-→ Make a recommendation without needing choices
+CRITICAL: Before searching, identify the EXACT vehicle from the user's message or conversation context. Search ONLY for products compatible with that specific year/make/model. Never mix up vehicles or brands.
 
-### Example 4: Logging a Purchase
-User: "I just bought that Castrol oil you mentioned"
-Your response: "Great choice! I'll log it for you. You now have a record that you used Castrol EDGE 10W-40 on your TW200. Next oil change is in 3000 miles or 6 months."
-[ACTION:log_purchase:TW200:productName=Castrol EDGE 10W-40,category=motor-oil,brand=Castrol,price=13.99]
-→ Only offer the action AFTER they confirm purchase
+BE CONCISE. Keep your prose to 2-3 short paragraphs max. Let the product cards do the heavy lifting.
 
-## Product Research Flow (IMPORTANT - MINIMIZE QUESTIONS)
+Structure your response as:
 
-When the user mentions products, parts, accessories, or maintenance that requires purchases:
+1. VEHICLE SPEC (1 sentence): State the exact vehicle and part spec
+   Example: "Your 2015 Honda CBR650F takes a HF204 oil filter."
+   Example: "Your 2009 Yamaha TW200 takes a YTX5L-BS battery."
 
-### Question Minimization Strategy
-- Use vehicle context (year, make, model) to make educated guesses about what they need
-- ONLY ask clarifying questions if there's genuine ambiguity (e.g., multiple incompatible options)
-- Example: User says "I need a battery for my 2023 Harley" → Don't ask "what type?" → Search for Harley batteries
-- Example: User says "battery" for unknown bike → Ask "What's the year/make/model?" (if not in context)
-- Example: User says "oil change" → Don't ask "what brand?" → Show Mobil/Castrol/Motul options at different prices
+2. OPTIONS SUMMARY (1-2 paragraphs): Briefly cover key differences between tiers
+   - Don't repeat details that will be in the product cards
+   - Focus on the "why" of each tier, not exhaustive specs
 
-### Product Search & Presentation Flow
+3. RECOMMENDATION (1 sentence): Your pick and why
+   Example: "For daily riding, I'd go with the Yuasa - proven and well-priced."
 
-1. DETECT product intent: Words like "need", "buy", "get", "install", "replace", "fix", "recommended", "should I use"
-   → Automatically use GOOGLE SEARCH to find actual products (don't ask permission)
+4. PRODUCT_INFO TAGS: Add one tag per product at the END:
+   [PRODUCT_INFO: Product Name | tier | one-line benefit | $XX-XX]
 
-2. FIND products with:
-   - Specific product names and model numbers
-   - Current prices with currency
-   - Direct purchase links (Amazon, RevZilla, manufacturer, bike shops, etc.)
-   - Include 3-5 options at different price points (budget to premium)
+   Tiers: budget, mid-range, premium, oem
 
-3. FORMAT products in conversation as markdown links with inline pricing:
-   [Product Name](https://purchase-url.com) - $XX.XX - brief description
-   Example: [Mobil 1 Synthetic 10W-40](https://amazon.com/...) - $12.99 - industry standard synthetic
+IMPORTANT: Search for reviews and forum discussions too - include them as sources. Users value real-world experience from forums like tw200forum.com, advrider.com, etc.
 
-   Use [PRODUCT: Product Name | https://url | $XX.XX | category] for structured tracking
+### TEMPLATE: MAINTENANCE (Use for: oil change, tire change, how-to questions)
 
-4. SMART FOLLOW-UP: After showing products, only ask if they:
-   - Need different options (price range, brand preference, specifications)
-   - Want to log a purchase (only if they indicate they bought something)
-   - Have specific questions about options shown
+BE CONCISE. 2-3 paragraphs max.
 
-### Critical: Never show log_purchase action prematurely
-- Only offer [ACTION:log_purchase:...] AFTER user explicitly says:
-  - "I bought [product]"
-  - "I'll go with [product]"
-  - "Log this" / "Add to my history"
-  - They confirm they made a purchase decision
+1. WHAT YOU NEED (1 sentence): Parts, tools, supplies
+2. KEY STEPS (1 paragraph): The essential process, conversationally
+3. PRO TIP (1 sentence): Most important thing to remember
+4. PRODUCT_INFO TAGS for recommended products
 
-## Interactive Features
+### TEMPLATE: TROUBLESHOOTING (Use for: won't start, running rough, strange noise)
 
-### Product Listings (NEW)
-When listing products found via search, use this structured format to track them:
-[PRODUCT: Product Name | https://purchase-url.com | $XX.XX | category]
+BE CONCISE. 2-3 paragraphs max.
 
-Example within conversation:
-"For your TW200, here are some recommended oils: [PRODUCT: Castrol EDGE 10W-40 | https://amazon.com/... | $12.99 | motor-oil] for synthetic protection or [PRODUCT: Shell Rotella T4 | https://amazon.com/... | $8.99 | motor-oil] for budget."
+1. LIKELY CAUSES (ranked): Most probable first
+2. QUICK DIAGNOSTIC: How to narrow it down fast
+3. PRODUCT_INFO TAGS if parts needed
 
-This allows the UI to track and suggest "log this purchase" actions for specific products.
+### TEMPLATE: COMPARISON (Use for: "X vs Y", "which is better")
+
+BE CONCISE. 2 paragraphs max.
+
+1. KEY DIFFERENCES: What matters between them
+2. VERDICT: Clear recommendation with reasoning
+3. PRODUCT_INFO TAGS for both options
+
+## PRODUCT_INFO SYNTAX - CRITICAL
+
+For EVERY product you mention, add this tag at the END of your response:
+[PRODUCT_INFO: Full Product Name | tier | one-line benefit/description | $XX-XX | URL]
+
+- Tiers: budget, mid-range, premium, oem
+- URL: Include the FULL URL from your search results if you have one. This is important!
+
+Examples:
+[PRODUCT_INFO: Yuasa YTX5L-BS | oem | Factory original, proven reliable | $50-60 | https://www.revzilla.com/product/yuasa-ytx5l-bs]
+[PRODUCT_INFO: Mighty Max YTX5L-BS | budget | Same specs, good value | $35-45]
+
+If you don't have a real URL from search, omit the URL field (don't make one up).
+
+The system uses these tags to create clickable product cards that link directly to retailers.
+
+## Product Search Strategy
+
+CRITICAL: When the user asks about a specific vehicle, you MUST search for products for THAT EXACT vehicle. Pay close attention to the year, make, and model mentioned in the conversation.
+
+When researching products, search MULTIPLE retailers to find the best prices and availability:
+1. Search: "[exact year] [exact make] [exact model] [part] site:revzilla.com" - Check RevZilla
+2. Search: "[exact year] [exact make] [exact model] [part] site:cyclegear.com" - Check Cycle Gear
+3. Search: "[exact year] [exact make] [exact model] [part] site:jpcycles.com" - Check J&P Cycles
+4. Search: "[exact year] [exact make] [exact model] [part] site:rockymountainatvmc.com" - Check Rocky Mountain
+5. Search: "[exact year] [exact make] [exact model] [part] review forum" - Find reviews and community recommendations
+
+VEHICLE MATCHING RULES:
+- If user mentions "CBR 650F" or "CBR650F", search for "Honda CBR650F" products - NOT BMW, KTM, or any other brand
+- If user mentions "TW200", search for "Yamaha TW200" products only
+- NEVER mix brands - a Honda filter is for Honda bikes, a BMW filter is for BMW bikes
+- Double-check that search results match the EXACT vehicle being discussed
+- If results seem wrong (e.g., "Honda filter for BMW"), discard them and search again with more specific terms
+
+CRITICAL RULES FOR PRODUCT LINKS:
+- ONLY use URLs from your Google Search results - NEVER make up URLs
+- VERIFY the product matches the user's vehicle before recommending it
+- AVOID Amazon and Walmart - their links often break. Prefer motorcycle-specific retailers.
+- Search MULTIPLE retailers and include the URL with the best price in each PRODUCT_INFO tag
+- If you can't find a working URL from a reputable motorcycle retailer, omit the URL (the system will provide a Google Shopping link)
+- Include forum discussions and review articles in your sources
 
 ### Choice Questions
-When you want to ask the user a question with specific options, use this format:
+When you want to ask the user a question with specific options:
 [CHOICE: Your question here? | Option 1 | Option 2 | Option 3]
 
-Use [CHOICE_CUSTOM: ...] if you want to allow custom input.
-
-Good examples:
-- After showing products: [CHOICE: Which one interests you? | The budget option | The premium option | Show me different brands]
-- Narrowing down: [CHOICE: Specific to any vehicle? | TW200 | Rebel 500 | Multiple vehicles]
-
 ### Quick Actions
-When you can help the user take an action, use this format:
+When you can help the user take an action (ONLY after they confirm a purchase):
 [ACTION:action_type:vehicle_name:param1=value1,param2=value2]
 
 Supported actions:
-- [ACTION:update_mileage:TW200:mileage=12500] - Update a vehicle's mileage
-- [ACTION:log_purchase:TW200:productName=Castrol 10W-40,category=oil,brand=Castrol,price=12.99,link=https://amazon.com/...] - Log a purchase
+- [ACTION:update_mileage:TW200:mileage=12500] - Update mileage
+- [ACTION:log_purchase:TW200:productName=Castrol 10W-40,category=oil,brand=Castrol] - Log purchase
 - [ACTION:log_maintenance:TW200:type=Oil Change,notes=Used Castrol 10W-40] - Log maintenance
-- [ACTION:set_status:TW200:status=maintenance] - Change vehicle status
+- [ACTION:set_status:TW200:status=maintenance] - Change status
 
-IMPORTANT: Only show log_purchase action AFTER the user explicitly says they bought something or wants to log it. Never offer it unprompted.
+CRITICAL: Only use [ACTION:log_purchase:...] AFTER user explicitly says they bought something.
 
 ## Communication Rules
-- Do NOT use markdown formatting (no bold, italics, headers, bullets, or code blocks) EXCEPT for links and prices
-- You CAN and SHOULD use markdown links: [Product Name](https://url.com) - $XX.XX for product links
-- Write in natural sentences and paragraphs, embedding product recommendations inline
-- Be concise but thorough - answer questions directly
-- ALWAYS include prices when recommending products (critical for shopping decisions)
-- ALWAYS include purchase links when available (format: [Name](url) - $price)
-- Do NOT ask "Would you like me to find products?" → Just provide them naturally in your response
+
+1. NO MARKDOWN FORMATTING in your prose:
+   - No bold (**text**) or italics
+   - No bullet points or numbered lists
+   - No headers
+   Write in plain, natural paragraphs with line breaks between them.
+
+2. Keep responses concise - 2-4 short paragraphs max for the prose section.
+
+3. DO NOT add a "Sources:" section - the system handles that automatically.
+
+4. ALWAYS add [PRODUCT_INFO] tags at the end for any products you mention.
 
 ${collectionSummary}
 ${purchaseContext}
@@ -463,64 +654,173 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
       content: message,
     });
 
-    // Call Gemini API with Google Search grounding for research questions
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: systemPrompt + '\n\nUser: ' + message,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    // Identify which vehicle the user is asking about BEFORE making API calls
+    let targetVehicle: Motorcycle | undefined;
+    if (vehicles?.length) {
+      const messageLower = message.toLowerCase();
+      for (const v of vehicles) {
+        const nameMatch = v.name.toLowerCase();
+        const makeMatch = v.make?.toLowerCase() || '';
+        const modelMatch = v.model?.toLowerCase() || '';
+        const nicknameMatch = v.nickname?.toLowerCase() || '';
 
-    let assistantMessage = response.text || 'I apologize, but I was unable to generate a response. Please try again.';
-
-    // Parse all syntax in order: products, choices, actions
-    const { cleanText: afterProducts, products } = parseProductsFromResponse(assistantMessage);
-    const { cleanText: afterChoice, choiceMetadata } = parseChoiceFromResponse(afterProducts);
-    const { cleanText: finalText, actionMetadata } = parseActionsFromResponse(afterChoice, vehicles || []);
-    assistantMessage = finalText;
-
-    // Combine metadata - prioritize by type
-    const metadata = choiceMetadata || actionMetadata || null;
-
-    // Store products mentioned in this response for future reference
-    if (products.length > 0) {
-      // We could add product logging here in the future
-      // For now, just track that products were mentioned
-    }
-
-    // Extract source URLs from grounding metadata if available
-    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-    if (groundingMetadata?.groundingChunks?.length) {
-      const sources: { url: string; title: string }[] = [];
-
-      for (const chunk of groundingMetadata.groundingChunks) {
-        const webChunk = chunk as { web?: { uri?: string; title?: string } };
-        if (webChunk.web?.uri) {
-          const url = webChunk.web.uri;
-          let title = webChunk.web.title;
-          if (!title) {
-            try {
-              title = new URL(url).hostname.replace('www.', '');
-            } catch {
-              title = 'Link';
-            }
-          }
-          sources.push({ url, title });
+        // Check various ways user might refer to the vehicle
+        if (
+          messageLower.includes(nameMatch) ||
+          (makeMatch && modelMatch && messageLower.includes(makeMatch) && messageLower.includes(modelMatch)) ||
+          (makeMatch && messageLower.includes(makeMatch) && messageLower.includes(String(v.year))) ||
+          (nicknameMatch && messageLower.includes(nicknameMatch)) ||
+          // Also check for partial model matches like "cbr 650" matching "CBR 650 F"
+          (modelMatch && modelMatch.split(' ').every(part => messageLower.includes(part.toLowerCase())))
+        ) {
+          targetVehicle = v;
+          break;
         }
       }
+    }
 
-      const uniqueSources = sources.filter(
-        (source, index, self) => index === self.findIndex((s) => s.title === source.title)
-      );
+    let assistantMessage: string;
+    let perplexityCitations: string[] = [];
 
-      if (uniqueSources.length > 0) {
-        assistantMessage += '\n\nSources:\n' + uniqueSources
-          .slice(0, 5)
-          .map((s) => `[${s.title}](${s.url})`)
-          .join('\n');
+    // Use Perplexity for product research queries, Gemini for everything else
+    const perplexityApiKey = process.env.PERPLEXITY_API_KEY;
+    const usePerplexity = perplexityApiKey && needsProductResearch(message);
+
+    if (usePerplexity) {
+      // Use Perplexity sonar-pro for product research with real-time web search
+      const perplexity = new OpenAI({
+        apiKey: perplexityApiKey,
+        baseURL: 'https://api.perplexity.ai',
+      });
+
+      // Build an enhanced message that explicitly states the vehicle
+      let enhancedMessage = message;
+      if (targetVehicle) {
+        const vehicleSpec = [targetVehicle.year, targetVehicle.make, targetVehicle.model].filter(Boolean).join(' ');
+        enhancedMessage = `[VEHICLE CONTEXT: The user is asking about their ${vehicleSpec}. This is a ${targetVehicle.year} model - search for products specifically compatible with this EXACT year and model, NOT newer versions like 2024 or 2025 models.]\n\nUser question: ${message}`;
+        console.log('Enhanced message for Perplexity:', enhancedMessage);
+      }
+
+      const perplexityResponse = await perplexity.chat.completions.create({
+        model: 'sonar-pro',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: enhancedMessage },
+        ],
+      });
+
+      assistantMessage = perplexityResponse.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response. Please try again.';
+
+      // Extract citations from Perplexity response
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      perplexityCitations = (perplexityResponse as any).citations || [];
+
+      console.log('Perplexity citations:', perplexityCitations);
+    } else {
+      // Use Gemini for non-product queries
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: systemPrompt + '\n\nUser: ' + message,
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
+
+      assistantMessage = response.text || 'I apologize, but I was unable to generate a response. Please try again.';
+    }
+
+    // Remove any AI-generated "Sources:" section - we'll add our own formatted version
+    assistantMessage = assistantMessage.replace(/\n\n(?:Sources|References|Learn more):\n[\s\S]*$/i, '');
+
+    // Parse syntax: choices, actions, and product info
+    const { cleanText: afterChoice, choiceMetadata } = parseChoiceFromResponse(assistantMessage);
+    const { cleanText: afterAction, actionMetadata } = parseActionsFromResponse(afterChoice, vehicles || []);
+    const { cleanText: finalText, productInfos } = parseProductInfoFromResponse(afterAction);
+    assistantMessage = finalText;
+
+    // Extract source URLs - from Perplexity citations or Gemini grounding
+    const groundingProducts: Array<{ name: string; url: string; store: string }> = [];
+    const infoSources: Array<{ title: string; url: string }> = [];
+
+    // List of common vehicle brands to detect mismatched products
+    const vehicleBrands = ['honda', 'yamaha', 'kawasaki', 'suzuki', 'bmw', 'ktm', 'ducati', 'harley', 'indian', 'triumph', 'aprilia', 'mv agusta', 'can-am', 'can am'];
+
+    if (usePerplexity && perplexityCitations.length > 0) {
+      // Process Perplexity citations
+      for (const url of perplexityCitations) {
+        if (typeof url !== 'string') continue;
+
+        try {
+          const hostname = new URL(url).hostname.replace('www.', '');
+
+          if (isProductUrl(url)) {
+            // Filter out products from wrong brands
+            if (targetVehicle?.make) {
+              const urlLower = url.toLowerCase();
+              const targetMake = targetVehicle.make.toLowerCase();
+
+              const mentionedBrand = vehicleBrands.find(brand =>
+                urlLower.includes(brand) && brand !== targetMake && !targetMake.includes(brand)
+              );
+
+              if (mentionedBrand && !urlLower.includes(targetMake)) {
+                console.log(`Filtering out mismatched product URL: ${url}`);
+                continue;
+              }
+            }
+
+            groundingProducts.push({
+              name: 'Product',
+              url,
+              store: extractStoreFromUrl(url),
+            });
+          } else {
+            infoSources.push({ title: hostname, url });
+          }
+        } catch {
+          // Invalid URL, skip
+        }
       }
     }
+
+    // Match AI-provided product info with grounding URLs (or create products without URLs)
+    const matchedProducts = matchProductsWithInfo(groundingProducts, productInfos);
+
+    // Deduplicate products by URL (or name if no URL)
+    const uniqueProducts = matchedProducts.filter(
+      (p, i, self) => i === self.findIndex((x) =>
+        (p.url && x.url === p.url) || (!p.url && !x.url && x.name === p.name)
+      )
+    ).slice(0, 8); // Allow more products for tiered display
+
+    const uniqueSources = infoSources.filter(
+      (s, i, self) => i === self.findIndex((x) => x.url === s.url)
+    ).slice(0, 5);
+
+    // Use the already-identified target vehicle for context, or try to find one
+    let vehicleContext: string | undefined;
+    if (targetVehicle) {
+      vehicleContext = [targetVehicle.year, targetVehicle.make, targetVehicle.model].filter(Boolean).join(' ');
+    } else if (vehicles?.length === 1) {
+      // If only one vehicle, use it as default context
+      const v = vehicles[0];
+      vehicleContext = [v.year, v.make, v.model].filter(Boolean).join(' ');
+    }
+
+    // Build sources metadata if we have products or sources
+    let sourcesMetadata: ChatSourcesMetadata | null = null;
+    if (uniqueProducts.length > 0 || uniqueSources.length > 0) {
+      sourcesMetadata = {
+        type: 'sources',
+        sources: uniqueSources,
+        products: uniqueProducts,
+        vehicleContext,
+      };
+    }
+
+    // Combine metadata - prioritize choices/actions, fall back to sources
+    const metadata: ChatChoiceMetadata | ChatActionMetadata | ChatSourcesMetadata | null =
+      choiceMetadata || actionMetadata || sourcesMetadata;
 
     // Extract and save facts from the conversation
     const extractedFacts = extractFactsFromConversation(message, assistantMessage, vehicles || []);
@@ -553,7 +853,11 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
       .update({ updated_at: new Date().toISOString() })
       .eq('id', currentSessionId);
 
-    return NextResponse.json({ message: assistantMessage, sessionId: currentSessionId, metadata });
+    return NextResponse.json({
+      message: assistantMessage,
+      sessionId: currentSessionId,
+      metadata,
+    });
   } catch (error) {
     console.error('Chat API error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

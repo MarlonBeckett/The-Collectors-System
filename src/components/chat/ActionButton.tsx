@@ -7,6 +7,7 @@ import {
   ShoppingCartIcon,
   ClipboardDocumentListIcon,
   CogIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
@@ -22,6 +23,7 @@ const actionIcons: Record<ChatAction['actionType'], React.ComponentType<React.SV
   log_purchase: ShoppingCartIcon,
   log_maintenance: WrenchScrewdriverIcon,
   set_status: ClipboardDocumentListIcon,
+  add_note: PencilSquareIcon,
 };
 
 export function ActionButton({ action, onExecute, disabled = false, compact = false }: ActionButtonProps) {

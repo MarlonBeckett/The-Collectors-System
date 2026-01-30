@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { ChatMessage as ChatMessageType, ChatSession } from '@/types/database';
+import { ChatMessage as ChatMessageType, ChatSession, ChatAction } from '@/types/database';
 import { ChatMessage } from '@/components/chat/ChatMessage';
 import { AppShell } from '@/components/layout/AppShell';
 import {
@@ -171,6 +171,37 @@ export default function ChatPage() {
     return date.toLocaleDateString();
   };
 
+  const handleChoiceSelect = (choice: string) => {
+    setInput(choice);
+    setTimeout(() => {
+      const form = document.querySelector('form');
+      form?.requestSubmit();
+    }, 0);
+  };
+
+  const handleActionExecute = async (action: ChatAction) => {
+    if (!action.vehicleId) {
+      throw new Error('Vehicle not found');
+    }
+
+    const response = await fetch('/api/vehicles/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: action.actionType,
+        vehicleId: action.vehicleId,
+        params: action.params,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Action failed');
+    }
+
+    return response.json();
+  };
+
   return (
     <AppShell>
       <div className="flex h-[calc(100dvh-8rem)] w-full relative">
@@ -301,8 +332,15 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+              messages.map((message, index) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isLatest={index === messages.length - 1 && message.role === 'assistant'}
+                  onChoiceSelect={handleChoiceSelect}
+                  onActionExecute={handleActionExecute}
+                  disabled={loading}
+                />
               ))
             )}
 

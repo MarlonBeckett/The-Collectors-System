@@ -120,6 +120,57 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  metadata?: ChatChoiceMetadata | ChatActionMetadata | ChatSourcesMetadata | null;
+}
+
+// Chat action types
+export interface ChatAction {
+  actionType: 'update_mileage' | 'log_purchase' | 'log_maintenance' | 'set_status' | 'add_note';
+  label: string;
+  vehicleId?: string;
+  params: Record<string, string | number>;
+}
+
+export interface ChatChoiceMetadata {
+  type: 'choice';
+  question: string;
+  options: string[];
+  allowCustom: boolean;
+}
+
+export interface ChatActionMetadata {
+  type: 'action';
+  actions: ChatAction[];
+}
+
+export type ProductTier = 'budget' | 'mid-range' | 'premium' | 'oem';
+
+export interface ChatProduct {
+  name: string;
+  url: string;
+  price?: string;
+  store: string;
+  tier?: ProductTier;
+  description?: string;
+}
+
+export interface ChatSourcesMetadata {
+  type: 'sources';
+  sources: Array<{ title: string; url: string }>;
+  products: ChatProduct[];
+  vehicleContext?: string; // e.g., "2009 Yamaha TW200" for search fallbacks
+}
+
+export interface VehicleFact {
+  id: string;
+  user_id: string;
+  vehicle_id: string;
+  fact_type: string;
+  fact_key: string;
+  fact_value: string;
+  source_session_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MotorcycleWithPhotos extends Motorcycle {

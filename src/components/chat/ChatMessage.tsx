@@ -1,9 +1,10 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { ChatMessage as ChatMessageType, ChatAction, ChatChoiceMetadata, ChatActionMetadata } from '@/types/database';
+import { ChatMessage as ChatMessageType, ChatAction, ChatChoiceMetadata, ChatActionMetadata, ChatSourcesMetadata } from '@/types/database';
 import { ChoiceButtons } from './ChoiceButtons';
 import { ActionButtons } from './ActionButton';
+import { ProductList, SourceList } from './ProductCard';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -48,7 +49,7 @@ function renderContentWithLinks(content: string, isUser: boolean) {
       // Create a product recommendation element if price is present
       if (price) {
         parts.push(
-          <div key={match.index} className="inline-flex items-baseline gap-1">
+          <span key={match.index} className="inline-flex items-baseline gap-1">
             <a
               href={url}
               target="_blank"
@@ -60,7 +61,7 @@ function renderContentWithLinks(content: string, isUser: boolean) {
             <span className={`text-sm ${isUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
               {price}
             </span>
-          </div>
+          </span>
         );
       } else {
         // Regular link without price
@@ -115,6 +116,9 @@ export function ChatMessage({ message, isLatest = false, onChoiceSelect, onActio
   const isActionMetadata = (m: typeof metadata): m is ChatActionMetadata =>
     m !== null && m !== undefined && m.type === 'action';
 
+  const isSourcesMetadata = (m: typeof metadata): m is ChatSourcesMetadata =>
+    m !== null && m !== undefined && m.type === 'sources';
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -142,6 +146,18 @@ export function ChatMessage({ message, isLatest = false, onChoiceSelect, onActio
             onExecute={onActionExecute}
             disabled={!canInteract}
           />
+        )}
+
+        {/* Sources and Products - rendered after message content */}
+        {!isUser && isSourcesMetadata(metadata) && (
+          <>
+            {metadata.sources.length > 0 && (
+              <SourceList sources={metadata.sources} />
+            )}
+            {metadata.products.length > 0 && (
+              <ProductList products={metadata.products} vehicleContext={metadata.vehicleContext} />
+            )}
+          </>
         )}
 
         <p className={`text-xs mt-2 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
