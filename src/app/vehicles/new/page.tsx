@@ -1,9 +1,35 @@
+import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { VehicleForm } from '@/components/vehicles/VehicleForm';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ArrowLeftIcon, DocumentArrowDownIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
-export default function NewVehiclePage() {
+export const dynamic = 'force-dynamic';
+
+export default async function NewVehiclePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  // Get editable collections (owner or editor role only)
+  const { data: allCollections } = await supabase.rpc('get_user_collections');
+
+  const editableCollections = (allCollections || [])
+    .filter((c: { is_owner: boolean; role: string }) => c.is_owner || c.role === 'editor')
+    .map((c: { id: string; name: string; is_owner: boolean }) => ({
+      id: c.id,
+      name: c.name,
+      is_owner: c.is_owner,
+    }));
+
+  if (editableCollections.length === 0) {
+    redirect('/');
+  }
+
   return (
     <AppShell>
       <div className="max-w-2xl mx-auto px-4 py-6">
@@ -17,7 +43,7 @@ export default function NewVehiclePage() {
           <h1 className="text-2xl font-bold text-foreground">Add Vehicle</h1>
         </div>
 
-        <VehicleForm mode="create" />
+        <VehicleForm mode="create" collections={editableCollections} />
 
         {/* Bulk Import Section */}
         <div className="mt-8 pt-6 border-t border-border">

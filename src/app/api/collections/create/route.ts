@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
       collection: {
         id: collection.id,
         name: collection.name,
-        join_code: collection.join_code,
       },
     });
   } catch (error) {

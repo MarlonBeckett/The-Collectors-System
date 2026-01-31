@@ -7,10 +7,17 @@ import { Motorcycle, MotorcycleStatus, VehicleType } from '@/types/database';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { PhotoUploader } from '@/components/photos/PhotoUploader';
 
+interface EditableCollection {
+  id: string;
+  name: string;
+  is_owner: boolean;
+}
+
 interface VehicleFormProps {
   vehicle?: Motorcycle;
   mode: 'create' | 'edit';
   collectionId?: string;
+  collections?: EditableCollection[];
 }
 
 const vehicleTypes: { value: VehicleType; label: string }[] = [
@@ -21,46 +28,13 @@ const vehicleTypes: { value: VehicleType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
+export function VehicleForm({ vehicle, mode, collectionId, collections }: VehicleFormProps) {
   const router = useRouter();
   const supabase = createClient();
-  const [userCollectionId, setUserCollectionId] = useState<string | null>(collectionId || null);
 
-  // Fetch user's collection if not provided
-  useEffect(() => {
-    if (mode === 'create' && !collectionId) {
-      async function fetchCollection() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // Get first owned collection
-        const { data: ownedCollection } = await supabase
-          .from('collections')
-          .select('id')
-          .eq('owner_id', user.id)
-          .limit(1)
-          .single();
-
-        if (ownedCollection) {
-          setUserCollectionId(ownedCollection.id);
-          return;
-        }
-
-        // Otherwise get first member collection
-        const { data: membership } = await supabase
-          .from('collection_members')
-          .select('collection_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
-
-        if (membership) {
-          setUserCollectionId(membership.collection_id);
-        }
-      }
-      fetchCollection();
-    }
-  }, [mode, collectionId, supabase]);
+  // For create mode: use first collection from the list if available
+  const defaultCollectionId = collectionId || (collections && collections.length > 0 ? collections[0].id : null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(defaultCollectionId);
 
   const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle?.vehicle_type || 'motorcycle');
   const [make, setMake] = useState(vehicle?.make || '');
@@ -124,7 +98,7 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
           .from('motorcycles')
           .insert({
             ...vehicleData,
-            collection_id: userCollectionId,
+            collection_id: selectedCollectionId,
           })
           .select()
           .single();
@@ -193,6 +167,33 @@ export function VehicleForm({ vehicle, mode, collectionId }: VehicleFormProps) {
       {error && (
         <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3">
           {error}
+        </div>
+      )}
+
+      {/* Collection Selector (create mode only) */}
+      {mode === 'create' && collections && collections.length > 0 && (
+        <div>
+          <label htmlFor="collection" className="block text-sm font-medium mb-2">
+            Add to Collection
+          </label>
+          {collections.length === 1 ? (
+            <div className="px-4 py-3 bg-muted border border-input text-foreground">
+              {collections[0].name}{collections[0].is_owner ? ' (Owner)' : ''}
+            </div>
+          ) : (
+            <select
+              id="collection"
+              value={selectedCollectionId || ''}
+              onChange={(e) => setSelectedCollectionId(e.target.value)}
+              className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}{collection.is_owner ? ' (Owner)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 

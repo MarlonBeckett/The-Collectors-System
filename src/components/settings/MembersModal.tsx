@@ -38,42 +38,50 @@ export function MembersModal({
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id;
 
-      const { data, error } = await supabase
+      // Fetch members first
+      const { data: membersData, error: membersError } = await supabase
         .from('collection_members')
-        .select(`
-          user_id,
-          role,
-          profiles:user_id (
-            email,
-            display_name
-          )
-        `)
+        .select('user_id, role')
         .eq('collection_id', collectionId);
 
-      if (!error && data) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const formatted = (data as any[])
-          .map((m) => {
-            // profiles can be an object or array depending on Supabase query
-            const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-            return {
-              user_id: m.user_id,
-              role: m.role,
-              email: profile?.email || null,
-              display_name: profile?.display_name || null,
-              isCurrentUser: m.user_id === currentUserId,
-            };
-          })
-          // Sort: owner first, then current user, then others
-          .sort((a, b) => {
-            if (a.role === 'owner') return -1;
-            if (b.role === 'owner') return 1;
-            if (a.isCurrentUser) return -1;
-            if (b.isCurrentUser) return 1;
-            return 0;
-          });
-        setMembers(formatted);
+      if (membersError || !membersData) {
+        setLoading(false);
+        return;
       }
+
+      // Fetch profiles for all member user_ids
+      const userIds = membersData.map((m) => m.user_id);
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, email, display_name')
+        .in('id', userIds);
+
+      // Create a map of user_id to profile
+      const profileMap = new Map(
+        (profilesData || []).map((p) => [p.id, p])
+      );
+
+      // Combine members with profiles
+      const formatted = membersData
+        .map((m) => {
+          const profile = profileMap.get(m.user_id);
+          return {
+            user_id: m.user_id,
+            role: m.role,
+            email: profile?.email || null,
+            display_name: profile?.display_name || null,
+            isCurrentUser: m.user_id === currentUserId,
+          };
+        })
+        // Sort: owner first, then current user, then others
+        .sort((a, b) => {
+          if (a.role === 'owner') return -1;
+          if (b.role === 'owner') return 1;
+          if (a.isCurrentUser) return -1;
+          if (b.isCurrentUser) return 1;
+          return 0;
+        });
+      setMembers(formatted);
       setLoading(false);
     }
 

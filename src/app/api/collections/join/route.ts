@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     if (!joinCode || typeof joinCode !== 'string') {
       return NextResponse.json(
-        { error: 'Join code is required' },
+        { error: 'Invite code is required' },
         { status: 400 }
       );
     }
@@ -28,14 +28,14 @@ export async function POST(request: NextRequest) {
 
     if (normalizedCode.length !== 6) {
       return NextResponse.json(
-        { error: 'Join code must be 6 characters' },
+        { error: 'Invite code must be 6 characters' },
         { status: 400 }
       );
     }
 
-    // Use the security definer function to join
-    const { data, error } = await supabase.rpc('join_collection_by_code', {
-      p_join_code: normalizedCode,
+    // Use the security definer function to join via invite
+    const { data, error } = await supabase.rpc('join_collection_by_invite', {
+      p_invite_code: normalizedCode,
     });
 
     if (error) {
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       success?: boolean;
       collection_id?: string;
       collection_name?: string;
+      role?: string;
     };
 
     if (result.error) {
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
         id: result.collection_id,
         name: result.collection_name,
       },
+      role: result.role,
     });
   } catch (error) {
     console.error('Join collection error:', error);

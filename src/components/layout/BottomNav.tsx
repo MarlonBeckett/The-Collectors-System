@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import {
   HomeIcon,
   PlusCircleIcon,
@@ -15,15 +17,38 @@ import {
   Cog6ToothIcon as Cog6ToothIconSolid,
 } from '@heroicons/react/24/solid';
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  activeIcon: React.ComponentType<{ className?: string }>;
+  requiresEditAccess?: boolean;
+}
+
+const allNavItems: NavItem[] = [
   { href: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconSolid },
-  { href: '/vehicles/new', label: 'Add', icon: PlusCircleIcon, activeIcon: PlusCircleIconSolid },
+  { href: '/vehicles/new', label: 'Add', icon: PlusCircleIcon, activeIcon: PlusCircleIconSolid, requiresEditAccess: true },
   { href: '/chat', label: 'Chat', icon: ChatBubbleLeftRightIcon, activeIcon: ChatBubbleLeftRightIconSolid },
   { href: '/settings', label: 'Settings', icon: Cog6ToothIcon, activeIcon: Cog6ToothIconSolid },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const [canEdit, setCanEdit] = useState(true); // Default to true to avoid flash
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function checkEditAccess() {
+      const { data: collections } = await supabase.rpc('get_user_collections');
+      const hasEditAccess = (collections || []).some(
+        (c: { is_owner: boolean; role: string }) => c.is_owner || c.role === 'editor'
+      );
+      setCanEdit(hasEditAccess);
+    }
+    checkEditAccess();
+  }, [supabase]);
+
+  const navItems = allNavItems.filter(item => !item.requiresEditAccess || canEdit);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 pb-safe">

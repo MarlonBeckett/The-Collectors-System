@@ -1,12 +1,36 @@
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { VehicleForm } from '@/components/vehicles/VehicleForm';
-import { Motorcycle } from '@/types/database';
+import { Motorcycle, CollectionRole } from '@/types/database';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 export const dynamic = 'force-dynamic';
+
+async function getUserRoleForCollection(supabase: Awaited<ReturnType<typeof createClient>>, collectionId: string): Promise<CollectionRole | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Check if user is owner
+  const { data: collection } = await supabase
+    .from('collections')
+    .select('owner_id')
+    .eq('id', collectionId)
+    .single();
+
+  if (collection?.owner_id === user.id) return 'owner';
+
+  // Check membership role
+  const { data: membership } = await supabase
+    .from('collection_members')
+    .select('role')
+    .eq('collection_id', collectionId)
+    .eq('user_id', user.id)
+    .single();
+
+  return (membership?.role as CollectionRole) || null;
+}
 
 interface EditVehiclePageProps {
   params: Promise<{ id: string }>;
@@ -27,6 +51,14 @@ export default async function EditVehiclePage({ params }: EditVehiclePageProps) 
   }
 
   const vehicle = data as Motorcycle;
+
+  // Check if user can edit this vehicle
+  if (vehicle.collection_id) {
+    const role = await getUserRoleForCollection(supabase, vehicle.collection_id);
+    if (role === 'viewer') {
+      redirect(`/vehicles/${id}`);
+    }
+  }
 
   return (
     <AppShell>

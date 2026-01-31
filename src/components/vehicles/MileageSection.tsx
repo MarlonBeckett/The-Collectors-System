@@ -10,9 +10,10 @@ import { PlusIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 interface MileageSectionProps {
   motorcycleId: string;
   mileageHistory: MileageHistory[];
+  canEdit?: boolean;
 }
 
-export function MileageSection({ motorcycleId, mileageHistory }: MileageSectionProps) {
+export function MileageSection({ motorcycleId, mileageHistory, canEdit = true }: MileageSectionProps) {
   const router = useRouter();
   const supabase = createClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -66,7 +67,7 @@ export function MileageSection({ motorcycleId, mileageHistory }: MileageSectionP
     <div className="bg-card border border-border p-4">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-medium text-muted-foreground">Mileage</h2>
-        {!isAdding && (
+        {canEdit && !isAdding && (
           <button
             onClick={() => setIsAdding(true)}
             className="flex items-center gap-1 px-2 py-1 text-xs bg-primary text-primary-foreground hover:opacity-90 transition-opacity"

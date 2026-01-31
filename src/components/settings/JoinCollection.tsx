@@ -7,7 +7,7 @@ export function JoinCollection() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ name: string; role: string } | null>(null);
 
   const router = useRouter();
 
@@ -19,7 +19,7 @@ export function JoinCollection() {
     const normalizedCode = code.trim().toUpperCase();
 
     if (normalizedCode.length !== 6) {
-      setError('Join code must be 6 characters');
+      setError('Invite code must be 6 characters');
       return;
     }
 
@@ -41,14 +41,14 @@ export function JoinCollection() {
         return;
       }
 
-      setSuccess(`Joined "${data.collection.name}" successfully!`);
+      setSuccess({ name: data.collection.name, role: data.role });
       setCode('');
 
       // Refresh the page to show updated collections
       setTimeout(() => {
         router.refresh();
       }, 1500);
-    } catch (err) {
+    } catch {
       setError('Failed to join collection');
     } finally {
       setLoading(false);
@@ -59,7 +59,7 @@ export function JoinCollection() {
     <div className="bg-card border border-border p-4">
       <h3 className="font-semibold mb-2">Join a Collection</h3>
       <p className="text-sm text-muted-foreground mb-4">
-        Enter a 6-character code to join someone else&apos;s collection
+        Enter a 6-character invite code to join someone else&apos;s collection
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -68,7 +68,7 @@ export function JoinCollection() {
             type="text"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
-            placeholder="Enter join code"
+            placeholder="Enter invite code"
             className="w-full px-4 py-3 bg-background border border-input font-mono text-lg text-center tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-ring"
             maxLength={6}
           />
@@ -79,7 +79,9 @@ export function JoinCollection() {
         )}
 
         {success && (
-          <div className="text-sm text-secondary">{success}</div>
+          <div className="text-sm text-secondary">
+            Joined &quot;{success.name}&quot; as {success.role}!
+          </div>
         )}
 
         <button

@@ -11,7 +11,6 @@ interface UserCollection {
   owner_id: string;
   owner_email: string | null;
   owner_display_name: string | null;
-  join_code: string;
   is_owner: boolean;
   role: string;
   created_at: string;

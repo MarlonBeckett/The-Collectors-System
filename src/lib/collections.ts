@@ -2,7 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Collection, CollectionMember } from '@/types/database';
 
 export interface CollectionWithRole extends Collection {
-  role: 'owner' | 'editor';
+  role: 'owner' | 'editor' | 'viewer';
   member_count: number;
 }
 
@@ -106,7 +106,7 @@ export async function getUserCollections(
     const membership = memberships?.find((m) => m.collection_id === c.id);
     return {
       ...c,
-      role: (membership?.role || 'editor') as 'owner' | 'editor',
+      role: (membership?.role || 'editor') as 'owner' | 'editor' | 'viewer',
       member_count: memberCountMap[c.id] || 0,
     };
   });
@@ -142,54 +142,42 @@ export async function getCollectionMembers(
 }
 
 /**
- * Join a collection using a join code
+ * Join a collection using an invite code
  */
-export async function joinCollectionByCode(
+export async function joinCollectionByInvite(
   supabase: SupabaseClient,
-  joinCode: string
-): Promise<{ success: boolean; error?: string; collection?: Collection }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
+  inviteCode: string
+): Promise<{ success: boolean; error?: string; collection?: Collection; role?: string }> {
+  const { data, error } = await supabase.rpc('join_collection_by_invite', {
+    p_invite_code: inviteCode.trim().toUpperCase(),
+  });
 
-  // Find collection by join code
-  const { data: collection, error: findError } = await supabase
-    .from('collections')
-    .select('*')
-    .eq('join_code', joinCode.toUpperCase())
-    .single();
-
-  if (findError || !collection) {
-    return { success: false, error: 'Invalid join code' };
-  }
-
-  // Check if already a member
-  const { data: existingMembership } = await supabase
-    .from('collection_members')
-    .select('id')
-    .eq('collection_id', collection.id)
-    .eq('user_id', user.id)
-    .single();
-
-  if (existingMembership) {
-    return { success: false, error: 'You are already a member of this collection' };
-  }
-
-  // Add user as member
-  const { error: joinError } = await supabase
-    .from('collection_members')
-    .insert({
-      collection_id: collection.id,
-      user_id: user.id,
-      role: 'editor',
-    });
-
-  if (joinError) {
+  if (error) {
     return { success: false, error: 'Failed to join collection' };
   }
 
-  return { success: true, collection };
+  const result = data as {
+    success: boolean;
+    error?: string;
+    collection_id?: string;
+    collection_name?: string;
+    role?: string;
+  };
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  return {
+    success: true,
+    collection: {
+      id: result.collection_id!,
+      name: result.collection_name!,
+      owner_id: '',
+      created_at: '',
+    },
+    role: result.role,
+  };
 }
 
 /**
@@ -229,55 +217,6 @@ export async function leaveCollection(
   return { success: true };
 }
 
-/**
- * Regenerate join code for a collection
- */
-export async function regenerateJoinCode(
-  supabase: SupabaseClient,
-  collectionId: string
-): Promise<{ success: boolean; error?: string; newCode?: string }> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return { success: false, error: 'Not authenticated' };
-  }
-
-  // Verify ownership
-  const { data: collection } = await supabase
-    .from('collections')
-    .select('owner_id')
-    .eq('id', collectionId)
-    .single();
-
-  if (collection?.owner_id !== user.id) {
-    return { success: false, error: 'Only owners can regenerate join codes' };
-  }
-
-  // Generate new code
-  const newCode = generateJoinCode();
-
-  const { error } = await supabase
-    .from('collections')
-    .update({ join_code: newCode })
-    .eq('id', collectionId);
-
-  if (error) {
-    return { success: false, error: 'Failed to regenerate code' };
-  }
-
-  return { success: true, newCode };
-}
-
-/**
- * Generate a random 6-character join code
- */
-function generateJoinCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
 
 /**
  * Remove a member from a collection (owner only)

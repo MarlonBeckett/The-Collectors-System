@@ -10,9 +10,10 @@ import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface VehicleStatusProps {
   vehicle: Motorcycle;
+  canEdit?: boolean;
 }
 
-export function VehicleStatus({ vehicle }: VehicleStatusProps) {
+export function VehicleStatus({ vehicle, canEdit = true }: VehicleStatusProps) {
   const router = useRouter();
   const supabase = createClient();
   const [isEditing, setIsEditing] = useState(false);
@@ -129,13 +130,15 @@ export function VehicleStatus({ vehicle }: VehicleStatusProps) {
       }`}>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-medium text-muted-foreground">Vehicle Status</h2>
-          <button
-            onClick={() => setIsEditing(true)}
-            className="p-1 hover:bg-muted/50 transition-colors rounded"
-            title="Edit status"
-          >
-            <PencilIcon className="w-4 h-4 text-muted-foreground" />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="p-1 hover:bg-muted/50 transition-colors rounded"
+              title="Edit status"
+            >
+              <PencilIcon className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
 
         {isGoodToGo ? (

@@ -34,14 +34,25 @@ export interface Motorcycle {
   collection_id: string | null;
 }
 
-export type CollectionRole = 'owner' | 'editor';
+export type CollectionRole = 'owner' | 'editor' | 'viewer';
 
 export interface Collection {
   id: string;
   name: string;
   owner_id: string;
-  join_code: string;
   created_at: string;
+}
+
+export interface CollectionInvite {
+  id: string;
+  collection_id: string;
+  invite_code: string;
+  role: 'editor' | 'viewer';
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
 }
 
 export interface CollectionMember {
@@ -160,8 +171,16 @@ export interface Database {
       };
       collections: {
         Row: Collection;
-        Insert: Omit<Collection, 'id' | 'created_at' | 'join_code'> & { id?: string; join_code?: string };
+        Insert: Omit<Collection, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<Collection, 'id' | 'created_at'>>;
+      };
+      collection_invites: {
+        Row: CollectionInvite;
+        Insert: Omit<CollectionInvite, 'id' | 'created_at' | 'expires_at' | 'used_at' | 'used_by'> & {
+          id?: string;
+          expires_at?: string;
+        };
+        Update: Partial<Pick<CollectionInvite, 'used_at' | 'used_by'>>;
       };
       collection_members: {
         Row: CollectionMember;

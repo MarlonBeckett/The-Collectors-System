@@ -16,7 +16,6 @@ interface UserCollection {
   owner_id: string;
   owner_email: string | null;
   owner_display_name: string | null;
-  join_code: string;
   is_owner: boolean;
   role: string;
   member_count: number;
@@ -215,7 +214,6 @@ export function SettingsContent({
                   id: collection.id,
                   name: collection.name,
                   owner_id: collection.owner_id,
-                  join_code: collection.join_code,
                   created_at: '',
                 }}
                 memberCount={collection.member_count}
@@ -239,7 +237,6 @@ export function SettingsContent({
                   id: collection.id,
                   name: collection.name,
                   owner_id: collection.owner_id,
-                  join_code: collection.join_code,
                   created_at: '',
                 }}
                 memberCount={collection.member_count}

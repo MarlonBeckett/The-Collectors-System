@@ -2,12 +2,36 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { PhotoGallery } from '@/components/photos/PhotoGallery';
 import { formatSaleInfo } from '@/lib/statusParser';
-import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory } from '@/types/database';
+import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, CollectionRole } from '@/types/database';
 import { VehicleStatus } from '@/components/vehicles/VehicleStatus';
 import { MileageSection } from '@/components/vehicles/MileageSection';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+
+async function getUserRoleForCollection(supabase: Awaited<ReturnType<typeof createClient>>, collectionId: string): Promise<CollectionRole | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Check if user is owner
+  const { data: collection } = await supabase
+    .from('collections')
+    .select('owner_id')
+    .eq('id', collectionId)
+    .single();
+
+  if (collection?.owner_id === user.id) return 'owner';
+
+  // Check membership role
+  const { data: membership } = await supabase
+    .from('collection_members')
+    .select('role')
+    .eq('collection_id', collectionId)
+    .eq('user_id', user.id)
+    .single();
+
+  return (membership?.role as CollectionRole) || null;
+}
 
 const vehicleTypeLabels: Record<VehicleType, string> = {
   motorcycle: 'Motorcycle',
@@ -55,6 +79,13 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
 
   const mileageHistory = (mileageData || []) as MileageHistory[];
 
+  // Get user's role for this vehicle's collection
+  let canEdit = true; // default to true for backwards compatibility
+  if (vehicle.collection_id) {
+    const role = await getUserRoleForCollection(supabase, vehicle.collection_id);
+    canEdit = role === 'owner' || role === 'editor';
+  }
+
   return (
     <AppShell>
       <div className="max-w-4xl mx-auto">
@@ -67,13 +98,15 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
             <ArrowLeftIcon className="w-5 h-5" />
             <span>Back</span>
           </Link>
-          <Link
-            href={`/vehicles/${id}/edit`}
-            className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:opacity-90"
-          >
-            <PencilIcon className="w-4 h-4" />
-            <span>Edit</span>
-          </Link>
+          {canEdit && (
+            <Link
+              href={`/vehicles/${id}/edit`}
+              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:opacity-90"
+            >
+              <PencilIcon className="w-4 h-4" />
+              <span>Edit</span>
+            </Link>
+          )}
         </div>
 
         {/* Photo Gallery */}
@@ -117,7 +150,7 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
           </div>
 
           {/* Vehicle Status Section - prominent, editable */}
-          <VehicleStatus vehicle={vehicle} />
+          <VehicleStatus vehicle={vehicle} canEdit={canEdit} />
 
           {/* Key Information */}
           <div className="grid gap-4">
@@ -141,7 +174,7 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
             </div>
 
             {/* Mileage - with update button */}
-            <MileageSection motorcycleId={vehicle.id} mileageHistory={mileageHistory} />
+            <MileageSection motorcycleId={vehicle.id} mileageHistory={mileageHistory} canEdit={canEdit} />
 
             {/* Notes */}
             {vehicle.notes && (

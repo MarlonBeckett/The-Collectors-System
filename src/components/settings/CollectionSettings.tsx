@@ -4,10 +4,9 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Collection } from '@/types/database';
 import { MembersModal } from './MembersModal';
+import { InviteModal } from './InviteModal';
 import {
-  ClipboardDocumentIcon,
-  ArrowPathIcon,
-  CheckIcon,
+  UserPlusIcon,
   TrashIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
@@ -25,45 +24,13 @@ export function CollectionSettings({
   isOwner,
   onUpdate,
 }: CollectionSettingsProps) {
-  const [copied, setCopied] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [joinCode, setJoinCode] = useState(collection.join_code);
   const [leaving, setLeaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [currentMemberCount, setCurrentMemberCount] = useState(memberCount);
 
   const supabase = createClient();
-
-  const copyJoinCode = async () => {
-    await navigator.clipboard.writeText(joinCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const regenerateCode = async () => {
-    if (!isOwner) return;
-
-    setRegenerating(true);
-    try {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let newCode = '';
-      for (let i = 0; i < 6; i++) {
-        newCode += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-
-      const { error } = await supabase
-        .from('collections')
-        .update({ join_code: newCode })
-        .eq('id', collection.id);
-
-      if (!error) {
-        setJoinCode(newCode);
-      }
-    } finally {
-      setRegenerating(false);
-    }
-  };
 
   const leaveCollection = async () => {
     if (isOwner) return;
@@ -139,52 +106,29 @@ export function CollectionSettings({
               <span className="text-xs text-muted-foreground">Owner</span>
             )}
           </div>
-          <button
-            onClick={() => setShowMembersModal(true)}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            <span>{currentMemberCount} member{currentMemberCount !== 1 ? 's' : ''}</span>
-            <ChevronRightIcon className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Share Code Section */}
-        <div className="px-4 pb-4 border-t border-border pt-4">
-          <div className="text-sm text-muted-foreground mb-2">Share Code</div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 bg-muted px-3 py-2 font-mono text-lg tracking-widest text-center">
-              {joinCode}
-            </div>
-            <button
-              onClick={copyJoinCode}
-              className="p-2.5 border border-border hover:bg-muted transition-colors"
-              title="Copy code"
-            >
-              {copied ? (
-                <CheckIcon className="w-5 h-5 text-secondary" />
-              ) : (
-                <ClipboardDocumentIcon className="w-5 h-5" />
-              )}
-            </button>
-            {isOwner && (
-              <button
-                onClick={regenerateCode}
-                disabled={regenerating}
-                className="p-2.5 border border-border hover:bg-muted transition-colors disabled:opacity-50"
-                title="Generate new code"
-              >
-                <ArrowPathIcon
-                  className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`}
-                />
-              </button>
-            )}
-          </div>
           {isOwner && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Regenerating invalidates the old code
-            </p>
+            <button
+              onClick={() => setShowMembersModal(true)}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <span>{currentMemberCount} member{currentMemberCount !== 1 ? 's' : ''}</span>
+              <ChevronRightIcon className="w-4 h-4" />
+            </button>
           )}
         </div>
+
+        {/* Invite Member Button - Only visible to owners */}
+        {isOwner && (
+          <div className="px-4 pb-4 border-t border-border pt-4">
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-border hover:bg-muted transition-colors"
+            >
+              <UserPlusIcon className="w-5 h-5" />
+              <span>Invite Member</span>
+            </button>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="px-4 pb-4 flex justify-between items-center">
@@ -217,6 +161,14 @@ export function CollectionSettings({
           isOwner={isOwner}
           onClose={() => setShowMembersModal(false)}
           onMemberRemoved={handleMemberRemoved}
+        />
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <InviteModal
+          collectionId={collection.id}
+          onClose={() => setShowInviteModal(false)}
         />
       )}
     </>

@@ -18,12 +18,7 @@ interface CollectionSwitcherProps {
 }
 
 function getDisplayName(collection: CollectionOption): string {
-  if (collection.is_owner) {
-    return collection.name;
-  }
-  // For collections we don't own, show owner's display name (fallback to email username)
-  const ownerName = collection.owner_display_name || collection.owner_email?.split('@')[0] || 'Someone';
-  return `${ownerName}'s Collection`;
+  return collection.name;
 }
 
 export function CollectionSwitcher({
