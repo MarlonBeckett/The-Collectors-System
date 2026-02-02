@@ -28,10 +28,13 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isResearching, setIsResearching] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const skipNextMessageLoad = useRef(false);
   const supabase = createClient();
 
   // Initialize from session storage
@@ -45,7 +48,24 @@ export default function ChatPage() {
 
     // Load sessions, then determine which one to show
     loadSessions(savedSessionId);
+
+    // Load personalized suggestions
+    loadSuggestions();
   }, []);
+
+  const loadSuggestions = async () => {
+    try {
+      const response = await fetch('/api/chat/suggestions');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.suggestions?.length > 0) {
+          setSuggestions(data.suggestions);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load suggestions:', error);
+    }
+  };
 
   // Save input to session storage when it changes (for draft preservation)
   useEffect(() => {
@@ -71,6 +91,12 @@ export default function ChatPage() {
   }, [currentSessionId, initialized]);
 
   useEffect(() => {
+    // Skip loading if we just set messages with metadata from API response
+    if (skipNextMessageLoad.current) {
+      skipNextMessageLoad.current = false;
+      return;
+    }
+
     if (currentSessionId) {
       loadMessages(currentSessionId);
     } else {
@@ -150,6 +176,19 @@ export default function ChatPage() {
     await loadSessions();
   };
 
+  // Check if a message is likely a product research query
+  const isProductResearchQuery = (msg: string) => {
+    const lowerMsg = msg.toLowerCase();
+    const researchPatterns = [
+      'best', 'recommend', 'buy', 'purchase', 'what.*should.*get',
+      'what.*battery', 'what.*tire', 'what.*oil', 'which.*should',
+      'where.*buy', 'price', 'compare', 'review', 'upgrade',
+      'replacement', 'part', 'parts', 'accessory', 'accessories',
+      'other option', 'more option', 'alternative', 'what else'
+    ];
+    return researchPatterns.some(pattern => new RegExp(pattern, 'i').test(lowerMsg));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -159,6 +198,11 @@ export default function ChatPage() {
     // Clear draft immediately when submitting
     sessionStorage.removeItem(STORAGE_KEY_DRAFT);
     setLoading(true);
+
+    // Check if this looks like a product research query
+    if (isProductResearchQuery(userMessage)) {
+      setIsResearching(true);
+    }
 
     // Optimistically add user message
     const tempUserMessage: ChatMessageType = {
@@ -185,15 +229,38 @@ export default function ChatPage() {
         throw new Error(data.details || data.error || 'Failed to send message');
       }
 
-      // Update session ID if this was a new chat
+      // Add assistant message directly with metadata instead of reloading
+      // This preserves the research metadata for rich rendering
+      console.log('API response data:', data);
+      console.log('API metadata:', data.metadata);
+
+      const assistantMessage: ChatMessageType = {
+        id: `assistant-${Date.now()}`,
+        user_id: '',
+        session_id: data.sessionId,
+        role: 'assistant',
+        content: data.message,
+        created_at: new Date().toISOString(),
+        metadata: data.metadata,
+      };
+
+      console.log('Assistant message with metadata:', assistantMessage);
+
+      // Replace temp message with actual user message and add assistant response
+      setMessages(prev => {
+        const updated = prev.filter(m => m.id !== 'temp-user');
+        return [...updated, {
+          ...tempUserMessage,
+          id: `user-${Date.now()}`,
+        }, assistantMessage];
+      });
+
+      // Update session ID AFTER setting messages to avoid useEffect reloading from DB
       if (data.sessionId && data.sessionId !== currentSessionId) {
+        // Temporarily disable the loadMessages effect by setting a flag
+        skipNextMessageLoad.current = true;
         setCurrentSessionId(data.sessionId);
         await loadSessions();
-      }
-
-      // Reload messages to get the actual IDs
-      if (data.sessionId) {
-        await loadMessages(data.sessionId);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -202,6 +269,7 @@ export default function ChatPage() {
       setInput(userMessage); // Restore the input
     } finally {
       setLoading(false);
+      setIsResearching(false);
     }
   };
 
@@ -320,30 +388,34 @@ export default function ChatPage() {
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground mb-6">What can I help you with?</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg px-4">
-                  {[
-                    "Give me an overview of my collection",
-                    "Which vehicles need attention right now?",
-                    "What battery should I get for the TW200?",
-                    "What maintenance should I do before riding season?",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => {
-                        setInput(suggestion);
-                        // Auto-submit after setting input
-                        setTimeout(() => {
-                          const form = document.querySelector('form');
-                          form?.requestSubmit();
-                        }, 0);
-                      }}
-                      disabled={loading}
-                      className="px-4 py-3 text-sm text-left bg-card border border-border hover:bg-muted hover:border-primary/50 transition-colors disabled:opacity-50"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
+                {suggestions.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg px-4">
+                    {suggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        onClick={() => {
+                          setInput(suggestion);
+                          // Auto-submit after setting input
+                          setTimeout(() => {
+                            const form = document.querySelector('form');
+                            form?.requestSubmit();
+                          }, 0);
+                        }}
+                        disabled={loading}
+                        className="px-4 py-3 text-sm text-left bg-card border border-border hover:bg-muted hover:border-primary/50 transition-colors disabled:opacity-50"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg px-4">
+                    <div className="px-4 py-3 bg-card border border-border animate-pulse h-12" />
+                    <div className="px-4 py-3 bg-card border border-border animate-pulse h-12" />
+                    <div className="px-4 py-3 bg-card border border-border animate-pulse h-12" />
+                    <div className="px-4 py-3 bg-card border border-border animate-pulse h-12" />
+                  </div>
+                )}
               </div>
             ) : (
               messages.map((message) => (
@@ -353,12 +425,50 @@ export default function ChatPage() {
 
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-card border border-border px-4 py-3 rounded">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
+                <div className="bg-card border border-border px-4 py-3">
+                  {isResearching ? (
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-6 h-6">
+                        <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="text-muted"
+                          />
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            className="text-primary animate-progress-fill"
+                            strokeDasharray="62.83"
+                            strokeDashoffset="62.83"
+                            style={{
+                              animation: 'progress-fill 20s ease-out forwards',
+                            }}
+                          />
+                        </svg>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Researching products...</span>
+                        <br />
+                        <span className="text-xs">Searching retailers and comparing options</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
                 </div>
               </div>
             )}

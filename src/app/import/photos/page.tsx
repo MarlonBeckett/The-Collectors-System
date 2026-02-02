@@ -16,14 +16,21 @@ export default async function BulkPhotoImportPage() {
   }
 
   // Check if user has any collection they can edit
-  const { data: collections } = await supabase.rpc('get_user_collections');
-  const canEdit = (collections || []).some(
+  const { data: collectionsData } = await supabase.rpc('get_user_collections');
+  const editableCollections = (collectionsData || []).filter(
     (c: { is_owner: boolean; role: string }) => c.is_owner || c.role === 'editor'
   );
 
-  if (!canEdit) {
+  if (editableCollections.length === 0) {
     redirect('/');
   }
+
+  // Format collections for the component
+  const collections = editableCollections.map((c: { id: string; name: string; is_owner: boolean }) => ({
+    id: c.id,
+    name: c.name,
+    is_owner: c.is_owner,
+  }));
 
   return (
     <AppShell>
@@ -41,7 +48,7 @@ export default async function BulkPhotoImportPage() {
           </div>
         </div>
 
-        <BulkPhotoImport />
+        <BulkPhotoImport collections={collections} />
       </div>
     </AppShell>
   );

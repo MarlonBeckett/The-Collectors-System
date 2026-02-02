@@ -82,7 +82,7 @@ export function BikeList({ bikes }: BikeListProps) {
                   : 'border-border text-muted-foreground hover:text-foreground'
               }`}
             >
-              {showInactive ? 'Hide' : 'Show'} {inactiveCount} inactive
+              {showInactive ? 'Hide' : 'Show'} {inactiveCount} sold
             </button>
           </div>
         )}

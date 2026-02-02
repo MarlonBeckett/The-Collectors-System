@@ -2,9 +2,51 @@
 
 import { ReactNode } from 'react';
 import { ChatMessage as ChatMessageType } from '@/types/database';
+import { ProductList } from './ProductCard';
+import { ResearchResult } from '@/types/research';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+}
+
+interface VehicleContext {
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  name?: string;
+}
+
+// Extract research result if present
+function getResearchResult(metadata?: Record<string, unknown>): ResearchResult | null {
+  if (metadata?.type === 'product_research' && metadata?.researchResult) {
+    const result = metadata.researchResult as ResearchResult;
+    // Validate that recommendations is an array
+    if (!Array.isArray(result.recommendations)) {
+      return null;
+    }
+    return result;
+  }
+  return null;
+}
+
+// Extract vehicle context from metadata
+function getVehicleContext(metadata?: Record<string, unknown>): VehicleContext | null {
+  if (metadata?.vehicleContext) {
+    return metadata.vehicleContext as VehicleContext;
+  }
+  return null;
+}
+
+// Build intro text based on vehicle context
+function buildIntroText(vehicleContext: VehicleContext | null): string {
+  if (vehicleContext) {
+    const parts = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean);
+    const vehicleStr = parts.length > 0 ? parts.join(' ') : vehicleContext.name;
+    if (vehicleStr) {
+      return `Based on your ${vehicleStr}, here are my top recommendations:`;
+    }
+  }
+  return 'Here are my top recommendations:';
 }
 
 // Get a friendly display name for a URL
@@ -72,7 +114,39 @@ function renderContentWithLinks(content: string, isUser: boolean) {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const researchResult = getResearchResult(message.metadata);
+  const vehicleContext = getVehicleContext(message.metadata);
 
+  // Debug logging - always log for assistant messages
+  if (!isUser) {
+    console.log('ChatMessage for assistant - has metadata:', !!message.metadata);
+    console.log('ChatMessage metadata:', message.metadata);
+    console.log('Research result extracted:', researchResult);
+  }
+
+  // For product research messages, render structured cards
+  if (!isUser && researchResult) {
+    console.log('RENDERING PRODUCT CARDS for', researchResult.recommendations.length, 'products');
+    // Build intro text from vehicle context (from metadata, not parsing content)
+    const introText = buildIntroText(vehicleContext);
+
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[95%] md:max-w-[85%] px-4 py-3 bg-card border border-border text-card-foreground">
+          <p className="text-sm mb-4">{introText}</p>
+          <ProductList
+            recommendations={researchResult.recommendations}
+            sources={researchResult.sources}
+          />
+          <p className="text-xs mt-3 text-muted-foreground">
+            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Standard message rendering
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div

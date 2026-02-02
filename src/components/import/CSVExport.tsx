@@ -173,7 +173,7 @@ export function CSVExport({ collections }: CSVExportProps) {
           <div>
             <div className="font-medium">Include inactive vehicles</div>
             <div className="text-sm text-muted-foreground">
-              Export sold, traded, and stored vehicles
+              Export sold and traded vehicles
             </div>
           </div>
         </label>
@@ -193,7 +193,7 @@ export function CSVExport({ collections }: CSVExportProps) {
           <div>
             <div className="font-medium">Encode status in notes</div>
             <div className="text-sm text-muted-foreground">
-              Prefix notes with SOLD/TRADED/STORED for re-import compatibility
+              Prefix notes with SOLD/TRADED for re-import compatibility
             </div>
           </div>
         </label>

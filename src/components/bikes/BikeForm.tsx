@@ -209,7 +209,7 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
           className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="active">Active</option>
-          <option value="stored">Stored</option>
+          <option value="maintenance">Needs Maintenance</option>
           <option value="sold">Sold</option>
           <option value="traded">Traded</option>
         </select>

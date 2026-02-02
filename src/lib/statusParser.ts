@@ -12,7 +12,6 @@ interface ParsedStatus {
  * Examples:
  * - "SOLD 7/25 $10,000" → status: sold, sale_info: {date: "2025-07-25", amount: 10000}
  * - "Traded in Vegas $7,000" → status: traded, sale_info: {amount: 7000, notes: "in Vegas"}
- * - "STORED - winter" → status: stored
  * - Regular notes → status: active
  */
 export function parseStatusFromNotes(notes: string | null | undefined): ParsedStatus {
@@ -44,16 +43,6 @@ export function parseStatusFromNotes(notes: string | null | undefined): ParsedSt
       status: 'traded',
       saleInfo: { ...saleInfo, type: 'traded' },
       cleanedNotes: saleInfo.notes || '',
-    };
-  }
-
-  // Check for STORED pattern
-  if (upperNotes.startsWith('STORED')) {
-    const remainder = trimmed.slice(6).replace(/^[\s-]+/, '').trim();
-    return {
-      status: 'stored',
-      saleInfo: null,
-      cleanedNotes: remainder,
     };
   }
 

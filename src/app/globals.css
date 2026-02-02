@@ -124,3 +124,13 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Progress circle fill animation for research loading */
+@keyframes progress-fill {
+  0% {
+    stroke-dashoffset: 62.83;
+  }
+  100% {
+    stroke-dashoffset: 6.28;
+  }
+}

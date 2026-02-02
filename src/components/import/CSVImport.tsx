@@ -227,7 +227,7 @@ export function CSVImport({ collections }: CSVImportProps) {
       let status: string = parsedStatus;
       if (mapping.status) {
         const statusValue = row[mapping.status]?.trim()?.toLowerCase();
-        if (['active', 'sold', 'traded', 'stored', 'maintenance'].includes(statusValue)) {
+        if (['active', 'sold', 'traded', 'maintenance'].includes(statusValue)) {
           status = statusValue;
         }
       }
@@ -316,7 +316,7 @@ export function CSVImport({ collections }: CSVImportProps) {
           vehicle_type: row.mapped.vehicle_type as 'motorcycle' | 'car' | 'boat' | 'trailer' | 'other',
           purchase_price: row.mapped.purchase_price,
           purchase_date: row.mapped.purchase_date,
-          status: row.mapped.status as 'active' | 'sold' | 'traded' | 'stored' | 'maintenance',
+          status: row.mapped.status as 'active' | 'sold' | 'traded' | 'maintenance',
           sale_info: row.mapped.sale_info,
           maintenance_notes: row.mapped.maintenance_notes,
           collection_id: selectedCollectionId,

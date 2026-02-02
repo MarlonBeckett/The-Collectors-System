@@ -1,9 +1,19 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+
+interface UserCollection {
+  id: string;
+  name: string;
+  is_owner: boolean;
+}
+
+interface BulkPhotoImportProps {
+  collections: UserCollection[];
+}
 
 interface FolderMatch {
   folderName: string;
@@ -21,24 +31,33 @@ interface UploadProgress {
   status: 'pending' | 'uploading' | 'done' | 'error';
 }
 
-export function BulkPhotoImport() {
+export function BulkPhotoImport({ collections }: BulkPhotoImportProps) {
   const [bikes, setBikes] = useState<Motorcycle[]>([]);
   const [matches, setMatches] = useState<FolderMatch[]>([]);
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [step, setStep] = useState<'select' | 'match' | 'uploading' | 'done'>('select');
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Default to first owned collection, or first collection if none owned
+  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
 
   const supabase = createClient();
 
   useEffect(() => {
     const loadBikes = async () => {
+      if (!selectedCollectionId) return;
+
       const { data } = await supabase
         .from('motorcycles')
         .select('*')
+        .eq('collection_id', selectedCollectionId)
         .order('name');
       if (data) setBikes(data);
     };
     loadBikes();
-  }, [supabase]);
+  }, [supabase, selectedCollectionId]);
 
   const fuzzyMatch = (folderName: string, bikeName: string): number => {
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -61,63 +80,161 @@ export function BulkPhotoImport() {
     return 0;
   };
 
-  const handleFolderSelect = useCallback(async () => {
-    try {
-      // Use File System Access API if available
-      if (window.showDirectoryPicker) {
-        const dirHandle = await window.showDirectoryPicker();
-        const folderMatches: FolderMatch[] = [];
+  const processFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const folderMap: Record<string, File[]> = {};
 
-        for await (const entry of dirHandle.values()) {
-          if (entry.kind === 'directory') {
-            const subDirHandle = await dirHandle.getDirectoryHandle(entry.name);
-            const files: File[] = [];
+    for (const file of fileArray) {
+      // Check if it's an image
+      if (!file.type.startsWith('image/')) continue;
 
-            for await (const fileEntry of subDirHandle.values()) {
-              if (fileEntry.kind === 'file') {
-                const fileHandle = fileEntry as FileSystemFileHandle;
-                const file = await fileHandle.getFile();
-                if (file.type.startsWith('image/')) {
-                  files.push(file);
-                }
-              }
-            }
+      // Get the relative path (webkitRelativePath includes folder structure)
+      const relativePath = file.webkitRelativePath || file.name;
+      const pathParts = relativePath.split('/').filter(p => p);
 
-            if (files.length > 0) {
-              // Find best matching bike
-              let bestMatch: Motorcycle | null = null;
-              let bestConfidence = 0;
+      // Skip hidden files and __MACOSX
+      if (relativePath.includes('__MACOSX') || relativePath.includes('/._')) continue;
+      if (file.name.startsWith('.')) continue;
 
-              for (const bike of bikes) {
-                const confidence = fuzzyMatch(entry.name, bike.name);
-                if (confidence > bestConfidence) {
-                  bestConfidence = confidence;
-                  bestMatch = bike;
-                }
-              }
-
-              folderMatches.push({
-                folderName: entry.name,
-                files,
-                matchedBike: bestConfidence >= 50 ? bestMatch : null,
-                confidence: bestConfidence,
-                manualOverride: null,
-              });
-            }
-          }
-        }
-
-        setMatches(folderMatches);
-        setStep('match');
+      // Determine folder name
+      // Structure: RootFolder/VehicleFolder/image.jpg
+      let folderName: string;
+      if (pathParts.length >= 2) {
+        // Use the second-to-last folder (vehicle folder)
+        // e.g., "Motorcycles/Honda CBR 650 F/IMG_001.jpg" -> "Honda CBR 650 F"
+        folderName = pathParts[pathParts.length - 2];
       } else {
-        alert('Your browser does not support folder selection. Please use Chrome, Edge, or another modern browser.');
+        // No folder structure, skip
+        continue;
       }
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        console.error('Error selecting folder:', err);
+
+      if (!folderMap[folderName]) {
+        folderMap[folderName] = [];
+      }
+      folderMap[folderName].push(file);
+    }
+
+    // Create folder matches
+    const folderMatches: FolderMatch[] = [];
+
+    for (const [folderName, files] of Object.entries(folderMap)) {
+      if (files.length === 0) continue;
+
+      // Find best matching bike
+      let bestMatch: Motorcycle | null = null;
+      let bestConfidence = 0;
+
+      for (const bike of bikes) {
+        const confidence = fuzzyMatch(folderName, bike.name);
+        if (confidence > bestConfidence) {
+          bestConfidence = confidence;
+          bestMatch = bike;
+        }
+      }
+
+      folderMatches.push({
+        folderName,
+        files,
+        matchedBike: bestConfidence >= 50 ? bestMatch : null,
+        confidence: bestConfidence,
+        manualOverride: null,
+      });
+    }
+
+    // Sort by folder name
+    folderMatches.sort((a, b) => a.folderName.localeCompare(b.folderName));
+
+    if (folderMatches.length === 0) {
+      alert('No image folders found. Make sure your folder contains subfolders with images.');
+      return;
+    }
+
+    setMatches(folderMatches);
+    setStep('match');
+  }, [bikes]);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
+    }
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const items = e.dataTransfer.items;
+    if (!items) return;
+
+    // Collect all files from the drop
+    const allFiles: File[] = [];
+    const promises: Promise<void>[] = [];
+
+    const traverseDirectory = async (entry: FileSystemEntry, path: string = ''): Promise<void> => {
+      if (entry.isFile) {
+        const fileEntry = entry as FileSystemFileEntry;
+        return new Promise((resolve) => {
+          fileEntry.file((file) => {
+            // Create a new file with the full path
+            const fullPath = path ? `${path}/${file.name}` : file.name;
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: fullPath,
+              writable: false,
+            });
+            allFiles.push(file);
+            resolve();
+          }, () => resolve());
+        });
+      } else if (entry.isDirectory) {
+        const dirEntry = entry as FileSystemDirectoryEntry;
+        const dirReader = dirEntry.createReader();
+
+        return new Promise((resolve) => {
+          const readEntries = () => {
+            dirReader.readEntries(async (entries) => {
+              if (entries.length === 0) {
+                resolve();
+                return;
+              }
+
+              for (const childEntry of entries) {
+                const childPath = path ? `${path}/${entry.name}` : entry.name;
+                await traverseDirectory(childEntry, childPath);
+              }
+
+              // Continue reading (directories may have batched results)
+              readEntries();
+            }, () => resolve());
+          };
+          readEntries();
+        });
+      }
+    };
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const entry = item.webkitGetAsEntry();
+      if (entry) {
+        promises.push(traverseDirectory(entry));
       }
     }
-  }, [bikes]);
+
+    Promise.all(promises).then(() => {
+      if (allFiles.length > 0) {
+        processFiles(allFiles);
+      }
+    });
+  }, [processFiles]);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
 
   const handleManualMatch = (folderName: string, bikeId: string | null) => {
     setMatches((prev) =>
@@ -234,6 +351,9 @@ export function BulkPhotoImport() {
     setMatches([]);
     setUploadProgress({});
     setStep('select');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const matchedCount = matches.filter(
@@ -243,27 +363,86 @@ export function BulkPhotoImport() {
 
   return (
     <div className="space-y-6">
+      {/* Collection Selector - shown during select and match steps */}
+      {collections.length > 0 && (step === 'select' || step === 'match') && (
+        <div className="bg-card border border-border p-4">
+          <label className="block text-sm font-medium mb-2">
+            Import photos to Collection
+          </label>
+          <select
+            value={selectedCollectionId}
+            onChange={(e) => {
+              setSelectedCollectionId(e.target.value);
+              // Reset matches when collection changes
+              setMatches([]);
+              setStep('select');
+            }}
+            className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {collections.map((collection) => (
+              <option key={collection.id} value={collection.id}>
+                {collection.name} {collection.is_owner ? '(Owner)' : ''}
+              </option>
+            ))}
+          </select>
+          {bikes.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              {bikes.length} vehicle{bikes.length !== 1 ? 's' : ''} in this collection
+            </p>
+          )}
+          {selectedCollectionId && bikes.length === 0 && (
+            <p className="text-sm text-amber-600 mt-2">
+              No vehicles in this collection. Import vehicles first before adding photos.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Step 1: Select Folder */}
       {step === 'select' && (
         <div>
-          <button
-            onClick={handleFolderSelect}
-            className="w-full border-2 border-dashed border-border p-8 text-center cursor-pointer hover:border-primary transition-colors"
+          <input
+            ref={fileInputRef}
+            type="file"
+            // @ts-expect-error webkitdirectory is not in the type definitions
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={handleFileInputChange}
+            className="hidden"
+            id="folder-input"
+          />
+
+          <div
+            onClick={() => bikes.length > 0 && fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`border-2 border-dashed p-8 text-center transition-colors ${
+              bikes.length === 0
+                ? 'border-border opacity-50 cursor-not-allowed'
+                : isDragging
+                ? 'border-primary bg-primary/5 cursor-pointer'
+                : 'border-border hover:border-primary cursor-pointer'
+            }`}
           >
             <FolderOpenIcon className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
             <p className="text-lg font-medium text-foreground">
-              Select Folder
+              {isDragging ? 'Drop folder here...' : 'Drop your folder here'}
             </p>
             <p className="text-muted-foreground mt-1">
-              Choose a folder containing subfolders for each motorcycle
+              or tap to select a folder
             </p>
-          </button>
+          </div>
 
           <div className="mt-4 bg-card border border-border p-4">
-            <h3 className="font-semibold mb-2">Expected Structure</h3>
+            <h3 className="font-semibold mb-2">Folder Structure</h3>
+            <p className="text-sm text-muted-foreground mb-2">
+              Organize photos in folders named after each vehicle:
+            </p>
             <pre className="text-sm text-muted-foreground font-mono">
-{`Motorcycles/
-├── KTM Super Duke 990/
+{`My Photos/
+├── Honda CBR 650 F/
 │   ├── IMG_1234.jpg
 │   └── IMG_5678.jpg
 ├── BMW R1250 GS/
@@ -283,7 +462,7 @@ export function BulkPhotoImport() {
               Found {matches.length} folders with {totalPhotos} photos
             </h3>
             <p className="text-sm text-muted-foreground">
-              {matchedCount} of {matches.length} folders matched to motorcycles
+              {matchedCount} of {matches.length} folders matched to vehicles
             </p>
           </div>
 
@@ -320,7 +499,7 @@ export function BulkPhotoImport() {
                     }
                     className="w-full px-3 py-2 bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
-                    <option value="">-- Select motorcycle --</option>
+                    <option value="">-- Select vehicle --</option>
                     {bikes.map((bike) => (
                       <option key={bike.id} value={bike.id}>
                         {bike.name} {bike.year ? `(${bike.year})` : ''}
@@ -373,7 +552,7 @@ export function BulkPhotoImport() {
                   ) : progress.status === 'error' ? (
                     <XCircleIcon className="w-5 h-5 text-destructive" />
                   ) : progress.status === 'uploading' ? (
-                    <div className="w-4 h-4 border-2 border-primary border-t-transparent animate-spin" />
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   ) : null}
                   <span className="text-sm text-muted-foreground">
                     {progress.completed}/{progress.total}
@@ -383,9 +562,9 @@ export function BulkPhotoImport() {
                   </span>
                 </div>
               </div>
-              <div className="w-full bg-muted h-2">
+              <div className="w-full bg-muted h-2 rounded-full">
                 <div
-                  className={`h-2 transition-all ${
+                  className={`h-2 rounded-full transition-all ${
                     progress.failed > 0 ? 'bg-destructive' : 'bg-secondary'
                   }`}
                   style={{

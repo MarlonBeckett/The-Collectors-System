@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@/lib/supabase/server';
 import { daysUntilExpiration } from '@/lib/dateUtils';
+import { classifyIntentFast, findVehicleContext } from '@/lib/chat/intentClassifier';
+import { performResearch, formatResearchResponse } from '@/lib/chat/researchOrchestrator';
+import { ResearchResult } from '@/types/research';
 
 export async function POST(request: NextRequest) {
   try {
@@ -109,6 +112,95 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
       `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
     ).join('\n') || '';
 
+    // Classify intent to determine if this needs deep product research
+    const intent = classifyIntentFast(message);
+
+    // Check for TAVILY_API_KEY for product research
+    const tavilyApiKey = process.env.TAVILY_API_KEY;
+    const canDoResearch = intent === 'product_research' && tavilyApiKey;
+
+    // If product research, find vehicle context and perform research
+    let researchResult: ResearchResult | null = null;
+    let foundVehicleContext: {
+      id: string;
+      name: string;
+      vehicleType: string;
+      year: number | null;
+      make: string | null;
+      model: string | null;
+      nickname: string | null;
+    } | null = null;
+
+    if (canDoResearch && vehicles?.length) {
+      // Try to find which vehicle the user is asking about
+      // First check the current message, then check recent chat history
+      const vehicleList = vehicles.map(v => ({
+        id: v.id,
+        name: v.name,
+        vehicle_type: v.vehicle_type,
+        year: v.year,
+        make: v.make,
+        model: v.model,
+        nickname: v.nickname,
+      }));
+
+      let vehicleContext = findVehicleContext(message, vehicleList);
+
+      // If not found in current message, check recent messages for context
+      if (!vehicleContext && recentMessages?.length) {
+        for (const msg of recentMessages) {
+          vehicleContext = findVehicleContext(msg.content, vehicleList);
+          if (vehicleContext) break;
+        }
+      }
+
+      try {
+        // Build search query - include previous product context for follow-up queries
+        let searchQuery = message;
+        let previousProducts: string[] = [];
+        const isFollowUp = /other|more|else|different|alternative/i.test(message.toLowerCase());
+
+        if (isFollowUp && recentMessages?.length) {
+          // Find the original product query from chat history
+          for (const msg of recentMessages) {
+            if (msg.role === 'user' && /battery|tire|oil|part|accessory/i.test(msg.content)) {
+              // Modify the query to find alternatives
+              searchQuery = msg.content + ' alternative options budget premium';
+              break;
+            }
+          }
+
+          // Extract product names from previous assistant responses to deprioritize them
+          for (const msg of recentMessages) {
+            if (msg.role === 'assistant') {
+              // Match product names like "1. Product Name" or numbered products
+              const productMatches = msg.content.match(/^\d+\.\s+(.+?)(?:\n|$)/gm);
+              if (productMatches) {
+                for (const match of productMatches) {
+                  const name = match.replace(/^\d+\.\s+/, '').trim();
+                  if (name.length > 5) {
+                    previousProducts.push(name);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        console.log('Starting product research for:', searchQuery);
+        console.log('Vehicle context:', vehicleContext);
+        console.log('Previously shown products:', previousProducts);
+        researchResult = await performResearch(searchQuery, vehicleContext, apiKey, previousProducts);
+        console.log('Research result:', researchResult?.recommendations?.length, 'recommendations');
+        if (vehicleContext) {
+          foundVehicleContext = vehicleContext;
+        }
+      } catch (error) {
+        console.error('Research failed, falling back to standard chat:', error);
+        // Continue with standard Gemini flow on research failure
+      }
+    }
+
     const systemPrompt = `You are a helpful assistant for a vehicle collection management app called "The Collectors System".
 You help users manage their motorcycles, cars, boats, trailers, and other vehicles.
 You have access to their complete collection data below and can provide personalized insights, recommendations, and answers.
@@ -137,57 +229,74 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
       content: message,
     });
 
-    // Call Gemini API with Google Search grounding for research questions
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: systemPrompt + '\n\nUser: ' + message,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    let assistantMessage: string;
+    let responseMetadata: Record<string, unknown> | null = null;
 
-    let assistantMessage = response.text || 'I apologize, but I was unable to generate a response. Please try again.';
+    // If we have research results, format them and use Gemini to create a natural response
+    if (researchResult && researchResult.recommendations.length > 0) {
+      // Format the research response with full vehicle context
+      assistantMessage = formatResearchResponse(researchResult, foundVehicleContext || undefined);
 
-    // Extract source URLs from grounding metadata if available
-    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-    if (groundingMetadata?.groundingChunks?.length) {
-      const sources: { url: string; title: string }[] = [];
+      // Store research metadata for UI rendering
+      responseMetadata = {
+        type: 'product_research',
+        researchResult,
+        vehicleContext: foundVehicleContext,
+      };
+    } else {
+      // Standard Gemini flow for quick questions and general chat
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: systemPrompt + '\n\nUser: ' + message,
+        config: {
+          tools: [{ googleSearch: {} }],
+        },
+      });
 
-      for (const chunk of groundingMetadata.groundingChunks) {
-        const webChunk = chunk as { web?: { uri?: string; title?: string } };
-        if (webChunk.web?.uri) {
-          const url = webChunk.web.uri;
-          let title = webChunk.web.title;
-          if (!title) {
-            try {
-              title = new URL(url).hostname.replace('www.', '');
-            } catch {
-              title = 'Link';
+      assistantMessage = response.text || 'I apologize, but I was unable to generate a response. Please try again.';
+
+      // Extract source URLs from grounding metadata if available
+      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      if (groundingMetadata?.groundingChunks?.length) {
+        const sources: { url: string; title: string }[] = [];
+
+        for (const chunk of groundingMetadata.groundingChunks) {
+          const webChunk = chunk as { web?: { uri?: string; title?: string } };
+          if (webChunk.web?.uri) {
+            const url = webChunk.web.uri;
+            let title = webChunk.web.title;
+            if (!title) {
+              try {
+                title = new URL(url).hostname.replace('www.', '');
+              } catch {
+                title = 'Link';
+              }
             }
+            sources.push({ url, title });
           }
-          sources.push({ url, title });
         }
-      }
 
-      // Deduplicate by title/domain
-      const uniqueSources = sources.filter(
-        (source, index, self) => index === self.findIndex((s) => s.title === source.title)
-      );
+        // Deduplicate by title/domain
+        const uniqueSources = sources.filter(
+          (source, index, self) => index === self.findIndex((s) => s.title === source.title)
+        );
 
-      if (uniqueSources.length > 0) {
-        assistantMessage += '\n\nSources:\n' + uniqueSources
-          .slice(0, 5) // Limit to 5 sources
-          .map((s) => `[${s.title}](${s.url})`)
-          .join('\n');
+        if (uniqueSources.length > 0) {
+          assistantMessage += '\n\nSources:\n' + uniqueSources
+            .slice(0, 5) // Limit to 5 sources
+            .map((s) => `[${s.title}](${s.url})`)
+            .join('\n');
+        }
       }
     }
 
-    // Save assistant message
+    // Save assistant message with metadata
     await supabase.from('chat_messages').insert({
       user_id: user.id,
       session_id: currentSessionId,
       role: 'assistant',
       content: assistantMessage,
+      metadata: responseMetadata,
     });
 
     // Update session title if it's a new session (use first message as title)
@@ -198,7 +307,25 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
         .eq('id', currentSessionId);
     }
 
-    return NextResponse.json({ message: assistantMessage, sessionId: currentSessionId });
+    // Return response with optional metadata for rich rendering
+    const responseBody: {
+      message: string;
+      sessionId: string | undefined;
+      metadata?: Record<string, unknown>;
+    } = {
+      message: assistantMessage,
+      sessionId: currentSessionId,
+    };
+
+    if (responseMetadata) {
+      responseBody.metadata = responseMetadata;
+      console.log('Returning response with metadata, recommendations count:',
+        (responseMetadata.researchResult as ResearchResult)?.recommendations?.length);
+    } else {
+      console.log('Returning response WITHOUT metadata');
+    }
+
+    return NextResponse.json(responseBody);
   } catch (error) {
     console.error('Chat API error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

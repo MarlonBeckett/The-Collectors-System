@@ -8,7 +8,7 @@ import { Profile } from '@/types/database';
 import { CollectionSettings } from '@/components/settings/CollectionSettings';
 import { JoinCollection } from '@/components/settings/JoinCollection';
 import { createClient } from '@/lib/supabase/client';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PencilIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
 interface UserCollection {
   id: string;
@@ -275,8 +275,19 @@ export function SettingsContent({
           >
             <ArrowUpTrayIcon className="w-5 h-5 text-muted-foreground" />
             <div>
-              <div className="font-medium">Import from CSV</div>
+              <div className="font-medium">Import Vehicles from CSV</div>
               <div className="text-sm text-muted-foreground">Add vehicles from a CSV file</div>
+            </div>
+          </Link>
+          <div className="border-t border-border" />
+          <Link
+            href="/import?tab=photos"
+            className="flex items-center gap-3 p-3 hover:bg-muted transition-colors -m-3 mt-0"
+          >
+            <PhotoIcon className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <div className="font-medium">Import Photos from Folder</div>
+              <div className="text-sm text-muted-foreground">Bulk upload photos organized by vehicle</div>
             </div>
           </Link>
         </div>

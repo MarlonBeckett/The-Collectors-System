@@ -415,7 +415,6 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
         >
           <option value="active">Active</option>
           <option value="maintenance">Needs Maintenance</option>
-          <option value="stored">Stored</option>
           <option value="sold">Sold</option>
           <option value="traded">Traded</option>
         </select>

@@ -1,4 +1,4 @@
-export type MotorcycleStatus = 'active' | 'sold' | 'traded' | 'stored' | 'maintenance';
+export type MotorcycleStatus = 'active' | 'sold' | 'traded' | 'maintenance';
 
 export type VehicleType = 'motorcycle' | 'car' | 'boat' | 'trailer' | 'other';
 
@@ -131,6 +131,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface MotorcycleWithPhotos extends Motorcycle {
