@@ -3,10 +3,11 @@
 import { ReactNode } from 'react';
 import { ChatMessage as ChatMessageType } from '@/types/database';
 import { ProductList } from './ProductCard';
-import { ResearchResult } from '@/types/research';
+import { ResearchResult, DiscoveryResult } from '@/types/research';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onSelectOption?: (option: string) => void;
 }
 
 interface VehicleContext {
@@ -25,6 +26,14 @@ function getResearchResult(metadata?: Record<string, unknown>): ResearchResult |
       return null;
     }
     return result;
+  }
+  return null;
+}
+
+// Extract discovery result if present
+function getDiscoveryResult(metadata?: Record<string, unknown>): DiscoveryResult | null {
+  if (metadata?.type === 'discovery' && metadata?.discoveryResult) {
+    return metadata.discoveryResult as DiscoveryResult;
   }
   return null;
 }
@@ -112,21 +121,110 @@ function renderContentWithLinks(content: string, isUser: boolean) {
   return parts.length > 0 ? parts : content;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const researchResult = getResearchResult(message.metadata);
+  const discoveryResult = getDiscoveryResult(message.metadata);
   const vehicleContext = getVehicleContext(message.metadata);
 
-  // Debug logging - always log for assistant messages
-  if (!isUser) {
-    console.log('ChatMessage for assistant - has metadata:', !!message.metadata);
-    console.log('ChatMessage metadata:', message.metadata);
-    console.log('Research result extracted:', researchResult);
+  // For discovery phase messages, render option buttons
+  if (!isUser && discoveryResult) {
+    const vehicleStr = vehicleContext
+      ? [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(' ')
+      : 'your vehicle';
+
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[95%] md:max-w-[85%] px-4 py-3 bg-card border border-border text-card-foreground">
+          <p className="text-sm font-medium mb-3">
+            Here&apos;s what I found about options for your {vehicleStr}:
+          </p>
+
+          {/* OEM Spec */}
+          {discoveryResult.oemSpec && (
+            <div className="mb-4 p-3 bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">OEM Specification</p>
+              <p className="text-sm font-medium">{discoveryResult.oemSpec}</p>
+            </div>
+          )}
+
+          {/* Product Types as clickable options */}
+          {discoveryResult.productTypes.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium mb-2">Your main options:</p>
+              <div className="space-y-2">
+                {discoveryResult.productTypes.map((type, index) => (
+                  <button
+                    key={index}
+                    onClick={() => onSelectOption?.(`Show me ${type.name.toLowerCase()} options`)}
+                    className="w-full text-left p-3 border border-border hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-sm">{type.name}</span>
+                      {type.priceRange && (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{type.priceRange}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{type.description}</p>
+                    {type.prosAndCons && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {type.prosAndCons.pros?.slice(0, 2).map((pro, i) => (
+                          <span key={`pro-${i}`} className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400">
+                            +{pro}
+                          </span>
+                        ))}
+                        {type.prosAndCons.cons?.slice(0, 1).map((con, i) => (
+                          <span key={`con-${i}`} className="text-xs px-1.5 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400">
+                            -{con}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Key Considerations */}
+          {discoveryResult.keyConsiderations.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium mb-2">Things to consider:</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                {discoveryResult.keyConsiderations.map((item, i) => (
+                  <li key={i}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Popular Brands */}
+          {discoveryResult.popularBrands.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground">
+                Popular brands: {discoveryResult.popularBrands.join(', ')}
+              </p>
+            </div>
+          )}
+
+          {/* Show All button */}
+          <button
+            onClick={() => onSelectOption?.('Show me all options')}
+            className="w-full mt-2 py-2 text-sm font-medium text-primary border border-primary/30 hover:bg-primary/10 transition-colors"
+          >
+            Show me all options
+          </button>
+
+          <p className="text-xs mt-3 text-muted-foreground">
+            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // For product research messages, render structured cards
   if (!isUser && researchResult) {
-    console.log('RENDERING PRODUCT CARDS for', researchResult.recommendations.length, 'products');
     // Build intro text from vehicle context (from metadata, not parsing content)
     const introText = buildIntroText(vehicleContext);
 

@@ -18,6 +18,7 @@ import {
   ChatBubbleLeftIcon,
   ChevronDownIcon,
   CheckIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 
 // Session storage keys for persisting chat state
@@ -46,6 +47,7 @@ export default function ChatPage() {
   const [collections, setCollections] = useState<CollectionOption[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [collectionDropdownOpen, setCollectionDropdownOpen] = useState(false);
+  const [researchMode, setResearchMode] = useState(false);
   const collectionDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const skipNextMessageLoad = useRef(false);
@@ -248,32 +250,6 @@ export default function ChatPage() {
     await loadSessions();
   };
 
-  // Check if a message is likely a product research query
-  // Keep in sync with src/lib/chat/intentClassifier.ts PRODUCT_RESEARCH_INDICATORS
-  const isProductResearchQuery = (msg: string) => {
-    const lowerMsg = msg.toLowerCase();
-    const researchPatterns = [
-      'best', 'recommend', 'buy', 'purchase', 'what.*should.*get',
-      'what.*battery', 'what.*tire', 'what.*oil', 'which.*should',
-      'where.*buy', 'price', 'compare', 'review', 'upgrade',
-      'replacement', 'part', 'parts', 'accessory', 'accessories',
-      'other option', 'more option', 'alternative', 'what else',
-      // Needs/new patterns for parts
-      'needs.*battery', 'needs.*tire', 'needs.*oil',
-      'need.*battery', 'need.*tire', 'need.*oil',
-      'new battery', 'new tire', 'new tires', 'new oil',
-      // Fix patterns
-      'fix', 'repair', 'replace',
-      // Direct part mentions
-      '\\bbattery\\b', '\\btire\\b', '\\btires\\b',
-      // Link/purchase request patterns
-      'get.*link', 'find.*link', 'link to', 'where can i get',
-      'where to get', 'where to buy', 'shop for', 'order',
-      'amazon', 'revzilla'
-    ];
-    return researchPatterns.some(pattern => new RegExp(pattern, 'i').test(lowerMsg));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -284,8 +260,8 @@ export default function ChatPage() {
     sessionStorage.removeItem(STORAGE_KEY_DRAFT);
     setLoading(true);
 
-    // Check if this looks like a product research query
-    if (isProductResearchQuery(userMessage)) {
+    // Research mode triggers research indicator
+    if (researchMode) {
       setIsResearching(true);
     }
 
@@ -304,7 +280,12 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, sessionId: currentSessionId, collectionId: selectedCollectionId }),
+        body: JSON.stringify({
+          message: userMessage,
+          sessionId: currentSessionId,
+          collectionId: selectedCollectionId,
+          researchMode,
+        }),
       });
 
       const data = await response.json();
@@ -361,7 +342,11 @@ export default function ChatPage() {
   const formatSessionDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Compare calendar days by zeroing out the time component
+    const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.round((today.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
@@ -538,7 +523,19 @@ export default function ChatPage() {
               </div>
             ) : (
               messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  onSelectOption={(option) => {
+                    // When user clicks an option from discovery results, submit it as a new message
+                    setInput(option);
+                    setResearchMode(true); // Keep research mode active
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      form?.requestSubmit();
+                    }, 0);
+                  }}
+                />
               ))
             )}
 
@@ -597,15 +594,50 @@ export default function ChatPage() {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="px-4 py-3 border-t border-border pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            {/* Research mode indicator */}
+            {researchMode && (
+              <div className="flex items-center gap-2 mb-2 px-2 py-1.5 bg-primary/10 border border-primary/20 text-sm">
+                <MagnifyingGlassIcon className="w-4 h-4 text-primary" />
+                <span className="text-primary font-medium">Research Mode</span>
+                <button
+                  type="button"
+                  onClick={() => setResearchMode(false)}
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={selectedCollectionId ? "Ask about your collection..." : "Select a collection to start..."}
-                disabled={loading || !selectedCollectionId}
-                className="flex-1 px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              />
+              <div className="flex-1 flex items-center bg-background border border-input focus-within:ring-2 focus-within:ring-ring">
+                <button
+                  type="button"
+                  onClick={() => setResearchMode(!researchMode)}
+                  disabled={loading || !selectedCollectionId}
+                  className={`p-3 transition-colors disabled:opacity-50 ${
+                    researchMode
+                      ? 'text-primary bg-primary/10'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                  title="Research products for your vehicles"
+                >
+                  <MagnifyingGlassIcon className="w-5 h-5" />
+                </button>
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={
+                    !selectedCollectionId
+                      ? "Select a collection to start..."
+                      : researchMode
+                        ? "What are you looking for? (e.g., battery for the TW200)"
+                        : "Ask about your collection..."
+                  }
+                  disabled={loading || !selectedCollectionId}
+                  className="flex-1 px-2 py-3 text-base bg-transparent focus:outline-none disabled:opacity-50"
+                />
+              </div>
               <button
                 type="submit"
                 disabled={loading || !input.trim() || !selectedCollectionId}

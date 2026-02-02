@@ -32,6 +32,32 @@ export interface ResearchProgress {
   detail?: string;
 }
 
+// Research mode phases for two-phase flow
+export type ResearchPhase = 'initial' | 'discovery' | 'product_finding' | 'complete';
+
+// Discovery phase results - information about product categories
+export interface DiscoveryResult {
+  oemSpec?: string;
+  productTypes: {
+    name: string;
+    description: string;
+    priceRange?: string;
+    prosAndCons?: { pros: string[]; cons: string[] };
+  }[];
+  keyConsiderations: string[];
+  popularBrands: string[];
+  suggestedQuestions: string[];
+}
+
+// Research session state tracked in chat metadata
+export interface ResearchState {
+  phase: ResearchPhase;
+  productCategory?: string; // e.g., "battery", "tire", "oil"
+  vehicleId?: string;
+  discoveryResult?: DiscoveryResult;
+  userPreferences?: string; // e.g., "lithium", "budget", etc.
+}
+
 export interface TavilySearchResult {
   title: string;
   url: string;

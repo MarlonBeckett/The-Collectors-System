@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@/lib/supabase/server';
 import { daysUntilExpiration } from '@/lib/dateUtils';
-import { classifyIntentFast, findVehicleContext } from '@/lib/chat/intentClassifier';
-import { performResearch, formatResearchResponse } from '@/lib/chat/researchOrchestrator';
-import { ResearchResult } from '@/types/research';
+import { findVehicleContext } from '@/lib/chat/intentClassifier';
+import {
+  performDiscoveryPhase,
+  performProductFindingPhase,
+  formatDiscoveryResponse,
+} from '@/lib/chat/researchOrchestrator';
+import { ResearchResult, ResearchState, DiscoveryResult } from '@/types/research';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { message, sessionId, collectionId } = await request.json();
+    const { message, sessionId, collectionId, researchMode } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -117,15 +121,9 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
       `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
     ).join('\n') || '';
 
-    // Classify intent to determine if this needs deep product research
-    const intent = classifyIntentFast(message);
-
-    // Check for TAVILY_API_KEY for product research
-    const tavilyApiKey = process.env.TAVILY_API_KEY;
-    const canDoResearch = intent === 'product_research' && tavilyApiKey;
-
-    // If product research, find vehicle context and perform research
+    // Research mode handling
     let researchResult: ResearchResult | null = null;
+    let discoveryResult: DiscoveryResult | null = null;
     let foundVehicleContext: {
       id: string;
       name: string;
@@ -135,102 +133,80 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
       model: string | null;
       nickname: string | null;
     } | null = null;
+    let researchState: ResearchState | null = null;
 
-    if (canDoResearch && vehicles?.length) {
-      // Try to find which vehicle the user is asking about
-      // First check the current message, then check recent chat history
-      const vehicleList = vehicles.map(v => ({
-        id: v.id,
-        name: v.name,
-        vehicle_type: v.vehicle_type,
-        year: v.year,
-        make: v.make,
-        model: v.model,
-        nickname: v.nickname,
-      }));
+    // Build vehicle list for context matching
+    const vehicleList = vehicles?.map(v => ({
+      id: v.id,
+      name: v.name,
+      vehicle_type: v.vehicle_type,
+      year: v.year,
+      make: v.make,
+      model: v.model,
+      nickname: v.nickname,
+    })) || [];
 
+    if (researchMode && apiKey) {
+      // Find vehicle context from current message or chat history
       let vehicleContext = findVehicleContext(message, vehicleList);
-
-      // If not found in current message, check recent messages for context
       if (!vehicleContext && recentMessages?.length) {
         for (const msg of recentMessages) {
           vehicleContext = findVehicleContext(msg.content, vehicleList);
           if (vehicleContext) break;
         }
       }
+      if (vehicleContext) {
+        foundVehicleContext = vehicleContext;
+      }
 
-      try {
-        // Build search query - include previous product context for follow-up queries
-        let searchQuery = message;
-        let previousProducts: string[] = [];
-        const isFollowUp = /other|more|else|different|alternative/i.test(message.toLowerCase());
-        const isLinkRequest = /get.*link|find.*link|link to|where.*buy|where.*get|buy it|order it|shop for/i.test(message.toLowerCase());
+      // Check if we're in the middle of a research flow by looking at recent messages
+      const lastAssistantMessage = recentMessages?.find(m => m.role === 'assistant');
+      const lastResearchState = lastAssistantMessage?.metadata?.researchState as ResearchState | undefined;
 
-        // Check if user is asking for a link to a specific product mentioned in the message
-        // e.g., "get me a link to the rotella" should search for "rotella"
-        if (isLinkRequest && recentMessages?.length) {
-          // Extract product name from the current message if present
-          // Common patterns: "link to the X", "buy X", "get X"
-          const productInMessage = message.match(/(?:link to(?: the)?|buy|get|order|find)\s+(?:the\s+)?([a-zA-Z0-9][\w\s-]*?)(?:\s*$|\s+for|\s+on)/i);
+      // Determine current phase based on context
+      if (lastResearchState?.phase === 'discovery') {
+        // User responded to discovery - this should be product finding phase
+        console.log('Research: Product finding phase triggered');
+        researchState = {
+          phase: 'product_finding',
+          productCategory: lastResearchState.productCategory,
+          vehicleId: foundVehicleContext?.id,
+          discoveryResult: lastResearchState.discoveryResult,
+          userPreferences: message, // User's refinement (e.g., "lithium options")
+        };
 
-          if (productInMessage && productInMessage[1] && productInMessage[1].trim().length > 2) {
-            // User specified a product in their message - search for it directly
-            const productName = productInMessage[1].trim();
-            searchQuery = `${productName} buy purchase`;
-          } else {
-            // User said something vague like "where do I buy it?" - look in chat history
-            // Find what product/brand was discussed recently
-            for (const msg of [...recentMessages].reverse()) {
-              if (msg.role === 'assistant') {
-                // Look for brand/product mentions in assistant responses
-                // Common patterns: "Rotella T4", "Amsoil", etc.
-                const brandMatches = msg.content.match(/\b(Rotella\s*T[46]?|Amsoil|Mobil\s*1|Castrol|Yamalube|Kawasaki|Honda|Shell|Motul|Maxima|Bel-Ray|Lucas|Valvoline)[\w\s-]*/gi);
-                if (brandMatches && brandMatches.length > 0) {
-                  // Use the most recently mentioned product
-                  searchQuery = `${brandMatches[0].trim()} buy purchase`;
-                  break;
-                }
-              }
-            }
-          }
-        } else if (isFollowUp && recentMessages?.length) {
-          // Find the original product query from chat history
-          for (const msg of recentMessages) {
-            if (msg.role === 'user' && /battery|tire|oil|part|accessory/i.test(msg.content)) {
-              // Modify the query to find alternatives
-              searchQuery = msg.content + ' alternative options budget premium';
-              break;
-            }
-          }
-
-          // Extract product names from previous assistant responses to deprioritize them
-          for (const msg of recentMessages) {
-            if (msg.role === 'assistant') {
-              // Match product names like "1. Product Name" or numbered products
-              const productMatches = msg.content.match(/^\d+\.\s+(.+?)(?:\n|$)/gm);
-              if (productMatches) {
-                for (const match of productMatches) {
-                  const name = match.replace(/^\d+\.\s+/, '').trim();
-                  if (name.length > 5) {
-                    previousProducts.push(name);
-                  }
-                }
-              }
-            }
-          }
+        try {
+          researchResult = await performProductFindingPhase(
+            lastResearchState.productCategory || message,
+            message,
+            foundVehicleContext || undefined,
+            lastResearchState.discoveryResult || undefined,
+            apiKey
+          );
+          console.log('Product finding result:', researchResult?.recommendations?.length, 'recommendations');
+        } catch (error) {
+          console.error('Product finding failed:', error);
         }
+      } else {
+        // First research message - run discovery phase
+        console.log('Research: Discovery phase triggered for:', message);
+        researchState = {
+          phase: 'discovery',
+          productCategory: message,
+          vehicleId: foundVehicleContext?.id,
+        };
 
-        console.log('Starting product research for:', searchQuery);
-        console.log('Vehicle context:', vehicleContext);
-        console.log('Previously shown products:', previousProducts);
-        researchResult = await performResearch(searchQuery, vehicleContext, apiKey, previousProducts);
-        console.log('Research result:', researchResult?.recommendations?.length, 'recommendations');
-        if (vehicleContext) {
-          foundVehicleContext = vehicleContext;
+        try {
+          discoveryResult = await performDiscoveryPhase(
+            message,
+            foundVehicleContext || undefined,
+            apiKey
+          );
+          researchState.discoveryResult = discoveryResult;
+          console.log('Discovery result:', discoveryResult);
+        } catch (error) {
+          console.error('Discovery phase failed:', error);
         }
-      } catch (error) {
-        console.error('Research failed, falling back to standard chat:', error);
-        // Continue with standard Gemini flow on research failure
       }
     }
 
@@ -265,16 +241,55 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
     let assistantMessage: string;
     let responseMetadata: Record<string, unknown> | null = null;
 
-    // If we have research results, format them and use Gemini to create a natural response
-    if (researchResult && researchResult.recommendations.length > 0) {
-      // Format the research response with full vehicle context
-      assistantMessage = formatResearchResponse(researchResult, foundVehicleContext || undefined);
+    // Handle discovery phase response
+    if (discoveryResult && researchState?.phase === 'discovery') {
+      assistantMessage = formatDiscoveryResponse(discoveryResult, foundVehicleContext || undefined);
 
-      // Store research metadata for UI rendering
+      responseMetadata = {
+        type: 'discovery',
+        discoveryResult,
+        vehicleContext: foundVehicleContext,
+        researchState,
+      };
+    }
+    // Handle product finding phase response
+    else if (researchResult && researchResult.recommendations.length > 0) {
+      // Build response text for product recommendations
+      const vehicleStr = foundVehicleContext
+        ? [foundVehicleContext.year, foundVehicleContext.make, foundVehicleContext.model].filter(Boolean).join(' ')
+        : null;
+
+      let response = vehicleStr
+        ? `Here are my top recommendations for your ${vehicleStr}:\n\n`
+        : 'Here are my top recommendations:\n\n';
+
+      researchResult.recommendations.forEach((rec, index) => {
+        response += `${index + 1}. ${rec.name || 'Unknown Product'}`;
+        if (rec.price && typeof rec.price.amount === 'number') {
+          response += ` ($${rec.price.amount.toFixed(2)})`;
+        }
+        response += '\n';
+        if (rec.reasoning) {
+          response += `   ${rec.reasoning}\n`;
+        }
+        const pros = Array.isArray(rec.pros) ? rec.pros : [];
+        const cons = Array.isArray(rec.cons) ? rec.cons : [];
+        if (pros.length > 0) {
+          response += `   Pros: ${pros.slice(0, 3).join(', ')}\n`;
+        }
+        if (cons.length > 0) {
+          response += `   Cons: ${cons.slice(0, 2).join(', ')}\n`;
+        }
+        response += '\n';
+      });
+
+      assistantMessage = response;
+
       responseMetadata = {
         type: 'product_research',
         researchResult,
         vehicleContext: foundVehicleContext,
+        researchState,
       };
     } else {
       // Standard Gemini flow for quick questions and general chat
@@ -332,12 +347,27 @@ ${historyContext ? `\n### Recent Conversation\n${historyContext}\n` : ''}`;
       metadata: responseMetadata,
     });
 
-    // Update session title if it's a new session (use first message as title)
+    // Generate AI title for new sessions (fire and forget)
     if (!sessionId && currentSessionId) {
-      await supabase
-        .from('chat_sessions')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', currentSessionId);
+      const sessionIdForTitle = currentSessionId;
+      (async () => {
+        try {
+          const titleResult = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: `Generate a concise 3-6 word title for this chat. No quotes or punctuation. Just the title.
+
+User: ${message.substring(0, 200)}
+Assistant: ${assistantMessage.substring(0, 200)}`,
+          });
+          const title = titleResult.text?.trim().substring(0, 100) || message.substring(0, 50);
+          await supabase
+            .from('chat_sessions')
+            .update({ title, updated_at: new Date().toISOString() })
+            .eq('id', sessionIdForTitle);
+        } catch (e) {
+          console.error('Title generation failed:', e);
+        }
+      })();
     }
 
     // Return response with optional metadata for rich rendering

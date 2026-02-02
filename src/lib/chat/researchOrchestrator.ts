@@ -3,299 +3,336 @@ import {
   ProductRecommendation,
   ResearchResult,
   VehicleContext,
-  TavilySearchResult,
+  DiscoveryResult,
 } from '@/types/research';
-import {
-  searchMultipleQueries,
-  aggregateResults,
-  validateLinks,
-  cleanProductUrl,
-  prioritizeNonAmazonResults,
-} from './tavilyService';
-import { getRetailerName } from './vehicleRetailers';
 
-export function expandQueries(
-  userQuery: string,
-  vehicleContext?: VehicleContext
-): string[] {
-  const queries: string[] = [];
-  const baseQuery = userQuery.toLowerCase();
-
-  // Build vehicle context string - be very specific for fitment
-  let vehicleStr = '';
-  let vehicleShort = '';
-  if (vehicleContext) {
-    const parts = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(
-      Boolean
-    );
-    vehicleStr = parts.join(' ');
-    vehicleShort = vehicleContext.model || '';
-    if (!vehicleStr && vehicleContext.name) {
-      vehicleStr = vehicleContext.name;
-      vehicleShort = vehicleContext.name;
-    }
-  }
-
-  // Query 1: Direct fitment search - include "fits" keyword for product pages
-  if (vehicleStr) {
-    queries.push(`${baseQuery} fits ${vehicleStr}`);
-  } else {
-    queries.push(`best ${baseQuery}`);
-  }
-
-  // Query 2: Year-specific OEM/replacement search
-  if (vehicleStr) {
-    queries.push(`${vehicleStr} ${baseQuery} OEM replacement compatible`);
-  }
-
-  // Query 3: Forum/community - these often have verified fitment info
-  if (vehicleShort) {
-    queries.push(`${vehicleShort} ${baseQuery} forum what fits`);
-  }
-
-  // Query 4: Exact part number search (forums often mention specific part numbers)
-  if (vehicleStr) {
-    queries.push(`${vehicleStr} ${baseQuery} part number size spec`);
-  }
-
-  // Query 5: Retailer-specific fitment search
-  if (vehicleStr) {
-    queries.push(`site:revzilla.com OR site:denniskirk.com ${vehicleStr} ${baseQuery}`);
-  }
-
-  // Limit to 5 queries max to stay within reasonable API usage
-  return queries.slice(0, 5);
-}
-
-export async function performResearch(
+/**
+ * Discovery Phase: Research product category information for a specific vehicle
+ * Returns OEM specs, product types, considerations, and popular options
+ */
+export async function performDiscoveryPhase(
   userQuery: string,
   vehicleContext?: VehicleContext,
-  geminiApiKey?: string,
-  excludeProducts?: string[]
-): Promise<ResearchResult> {
-  // Step 1: Expand queries based on context
-  const expandedQueries = expandQueries(userQuery, vehicleContext);
-
-  // Step 2: Perform parallel Tavily searches
-  const searchResults = await searchMultipleQueries(expandedQueries, vehicleContext);
-
-  // Step 3: Aggregate and deduplicate results
-  let aggregatedResults = aggregateResults(searchResults);
-
-  // Step 4: Prioritize non-Amazon results
-  aggregatedResults = prioritizeNonAmazonResults(aggregatedResults);
-
-  // Step 5: Clean URLs
-  aggregatedResults = aggregatedResults.map((r) => ({
-    ...r,
-    url: cleanProductUrl(r.url),
-  }));
-
-  // Step 6: Validate top links (limit to save time)
-  const topUrls = aggregatedResults.slice(0, 15).map((r) => r.url);
-  const validationResults = await validateLinks(topUrls);
-
-  // Filter out invalid links
-  aggregatedResults = aggregatedResults.filter((r) => {
-    const isValid = validationResults.get(r.url);
-    return isValid !== false; // Keep if valid or not checked
-  });
-
-  // Step 7: Synthesize recommendations using Gemini
-  if (geminiApiKey && aggregatedResults.length > 0) {
-    return await synthesizeRecommendations(
-      userQuery,
-      aggregatedResults,
-      vehicleContext,
-      geminiApiKey,
-      excludeProducts
-    );
+  apiKey?: string
+): Promise<DiscoveryResult> {
+  if (!apiKey) {
+    throw new Error('API key required for discovery phase');
   }
 
-  // Fallback: Create basic recommendations from search results
-  return createBasicRecommendations(aggregatedResults);
-}
-
-async function synthesizeRecommendations(
-  userQuery: string,
-  searchResults: TavilySearchResult[],
-  vehicleContext: VehicleContext | undefined,
-  apiKey: string,
-  excludeProducts?: string[]
-): Promise<ResearchResult> {
   const ai = new GoogleGenAI({ apiKey });
 
   const vehicleInfo = vehicleContext
-    ? `User's vehicle: ${[vehicleContext.year, vehicleContext.make, vehicleContext.model]
-        .filter(Boolean)
-        .join(' ')} (${vehicleContext.vehicleType})`
-    : 'No specific vehicle context';
+    ? `${[vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(' ')} (${vehicleContext.vehicleType})`
+    : 'unspecified vehicle';
 
-  const searchContext = searchResults
-    .slice(0, 15)
-    .map(
-      (r, i) =>
-        `[${i + 1}] ${r.title}\nURL: ${r.url}\nContent: ${r.content.substring(0, 500)}...`
-    )
-    .join('\n\n');
+  // Step 1: Search for information with Google grounding
+  const searchPrompt = `Research ${userQuery} for a ${vehicleInfo}.
 
-  const excludeSection = excludeProducts && excludeProducts.length > 0
-    ? `\n\nPREVIOUSLY SHOWN PRODUCTS (prioritize showing DIFFERENT products, but you can include these if they're the best options):\n${excludeProducts.map(p => `- ${p}`).join('\n')}\n\nTry to find new/different products first, but it's OK to include a previously shown product if it's clearly the best fit.`
-    : '';
+Find:
+1. What is the OEM/stock specification? Include part numbers.
+2. What types/categories are available (e.g., for batteries: Lithium-Ion, AGM, Lead-Acid)?
+3. What are key considerations when choosing?
+4. What are popular brands recommended by owners?
 
-  const prompt = `You are a product research assistant helping a vehicle owner find parts and accessories.
-
-${vehicleInfo}
-
-User's question: "${userQuery}"${excludeSection}
-
-CRITICAL FITMENT RULES:
-- ONLY recommend products that EXPLICITLY state compatibility with the user's exact vehicle (year, make, model)
-- If a search result shows a product page, the product MUST list the user's vehicle in its fitment/compatibility section
-- Do NOT recommend products just because they appear in search results - verify fitment is mentioned
-- Forum recommendations are valuable because users confirm what actually fits
-- If you cannot verify fitment for at least 3 products, return fewer recommendations rather than guessing
-- Include the specific part number (like YB7C-A for batteries) when mentioned
-
-Based on the following search results, provide up to 10 product recommendations (ONLY if fitment is verified). Include pros AND cons for each product.
-
-Search Results:
-${searchContext}
-
-Respond in JSON format with this structure:
-{
-  "recommendations": [
-    {
-      "name": "Product name with part number if available",
-      "brand": "Brand name",
-      "price": { "amount": 89.99, "currency": "USD", "source": "retailer name" },
-      "url": "exact URL from search results",
-      "reasoning": "Why this fits their specific vehicle - cite the fitment evidence",
-      "pros": ["Pro 1", "Pro 2", "Pro 3"],
-      "cons": ["Con 1", "Con 2"],
-      "reviewSummary": "Brief summary of what reviewers say"
-    }
-  ]
-}
-
-Rules:
-1. Only use URLs that appear in the search results
-2. ONLY recommend if the search result explicitly mentions compatibility with the user's vehicle
-3. If fitment is uncertain, add "Verify fitment before purchase" to cons
-4. Prioritize products from specialty retailers (RevZilla, Dennis Kirk, RockAuto) over Amazon
-5. If a forum post confirms "I use X on my [vehicle]", that counts as verified fitment`;
+Use Google Search to find current, accurate information.`;
 
   try {
-    const response = await ai.models.generateContent({
+    const searchResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: searchPrompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const searchText = searchResponse.text || '';
+    console.log('Discovery search response length:', searchText.length);
+
+    // Step 2: Structure the search results into JSON
+    const structurePrompt = `Based on the following research about ${userQuery} for a ${vehicleInfo}, extract and structure the information.
+
+Research findings:
+${searchText}
+
+Respond ONLY with a valid JSON object (no markdown, no explanation):
+{
+  "oemSpec": "OEM specification and part number if found, or null",
+  "productTypes": [
+    {
+      "name": "Type name",
+      "description": "Brief description",
+      "priceRange": "$XX - $XX or null",
+      "prosAndCons": {
+        "pros": ["Pro 1", "Pro 2"],
+        "cons": ["Con 1", "Con 2"]
+      }
+    }
+  ],
+  "keyConsiderations": ["Consideration 1", "Consideration 2"],
+  "popularBrands": ["Brand 1", "Brand 2"],
+  "suggestedQuestions": ["Question to help narrow down choice"]
+}`;
+
+    const structureResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: structurePrompt,
       config: {
         responseMimeType: 'application/json',
       },
     });
 
-    const text = response.text || '';
-    const parsed = JSON.parse(text);
+    const jsonText = structureResponse.text || '';
+    console.log('Discovery structured response:', jsonText.substring(0, 300));
 
-    // Collect unique sources
-    const sources = new Map<string, string>();
-    for (const result of searchResults.slice(0, 10)) {
-      const domain = getRetailerName(result.url);
-      if (!sources.has(domain)) {
-        sources.set(domain, result.url);
+    const parsed = JSON.parse(jsonText);
+
+    return {
+      oemSpec: parsed.oemSpec || undefined,
+      productTypes: parsed.productTypes || [],
+      keyConsiderations: parsed.keyConsiderations || [],
+      popularBrands: parsed.popularBrands || [],
+      suggestedQuestions: parsed.suggestedQuestions || [],
+    };
+  } catch (error) {
+    console.error('Discovery phase error:', error);
+    return {
+      productTypes: [],
+      keyConsiderations: ['Unable to complete research. Please try again.'],
+      popularBrands: [],
+      suggestedQuestions: ['What specific type are you looking for?'],
+    };
+  }
+}
+
+/**
+ * Product Finding Phase: Search for actual products with purchase links
+ * Uses the discovery context to find specific products that match user preferences
+ */
+export async function performProductFindingPhase(
+  productCategory: string,
+  userPreferences: string,
+  vehicleContext?: VehicleContext,
+  discoveryContext?: DiscoveryResult,
+  apiKey?: string
+): Promise<ResearchResult> {
+  if (!apiKey) {
+    throw new Error('API key required for product finding phase');
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const vehicleInfo = vehicleContext
+    ? `${[vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(' ')} (${vehicleContext.vehicleType})`
+    : 'unspecified vehicle';
+
+  const oemContext = discoveryContext?.oemSpec
+    ? `OEM Spec: ${discoveryContext.oemSpec}`
+    : '';
+
+  // Extract key terms for better searching
+  const searchTerms = userPreferences.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+
+  // Determine retailer based on vehicle type
+  const isMotorcycle = vehicleContext?.vehicleType === 'motorcycle';
+  const retailer = isMotorcycle ? 'RevZilla' : 'Amazon';
+  const retailerSite = isMotorcycle ? 'site:revzilla.com' : '';
+
+  // Step 1: Search for actual products on the specific retailer
+  const searchPrompt = `Search ${retailerSite} for ${searchTerms} ${productCategory} that fits ${vehicleInfo}.
+
+Find ALL ${searchTerms} ${productCategory} products on ${retailer} that are compatible with ${vehicleInfo}.
+
+Search for: "${vehicleContext?.year || ''} ${vehicleContext?.make || ''} ${vehicleContext?.model || ''} ${searchTerms} ${productCategory} ${retailerSite}"
+
+For each product found:
+- Exact product name and part number
+- Current price
+- Direct product page URL on ${retailer}
+- Confirm it shows as fitting ${vehicleInfo} in the fitment selector
+
+${oemContext}
+
+Find as many compatible products as possible from ${retailer}.`;
+
+  try {
+    const searchResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: searchPrompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const searchText = searchResponse.text || '';
+    console.log('Product search response length:', searchText.length);
+
+    // Extract grounding sources for URLs
+    const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
+    const groundingChunks = groundingMetadata?.groundingChunks || [];
+    const sourceUrls: { url: string; title: string }[] = [];
+
+    for (const chunk of groundingChunks) {
+      const webChunk = chunk as { web?: { uri?: string; title?: string } };
+      if (webChunk.web?.uri) {
+        const url = webChunk.web.uri;
+        let title = webChunk.web.title || '';
+        if (!title) {
+          try {
+            title = new URL(url).hostname.replace('www.', '');
+          } catch {
+            title = 'Link';
+          }
+        }
+        // Filter URLs based on vehicle type
+        const isSearchPage = url.includes('/search') || url.includes('?q=');
+        const isRevZilla = url.includes('revzilla.com');
+
+        // For motorcycles, only allow RevZilla
+        if (isMotorcycle) {
+          if (isRevZilla && !isSearchPage) {
+            sourceUrls.push({ url, title });
+          }
+        } else {
+          // For other vehicles, exclude eBay and Walmart
+          const isEbay = url.includes('ebay.com');
+          const isWalmart = url.includes('walmart.com');
+          if (!isSearchPage && !isEbay && !isWalmart) {
+            sourceUrls.push({ url, title });
+          }
+        }
       }
     }
 
+    // Step 2: Structure the products into JSON
+    const structurePrompt = `Extract ALL products from the search results for ${userPreferences} ${productCategory} for ${vehicleInfo}.
+
+Search results:
+${searchText}
+
+Available URLs from search:
+${sourceUrls.map(s => `- ${s.title}: ${s.url}`).join('\n')}
+
+RULES:
+1. Extract EVERY product mentioned from ${isMotorcycle ? 'RevZilla' : 'the search results'}
+2. Include ALL brands found (Shorai, Antigravity, BikeMaster, Duraboost, Tusk, Yuasa, MotoBatt, etc.)
+3. Only include products with RevZilla URLs (revzilla.com)
+4. For fitment: if ${retailer} shows it fits the vehicle, it's confirmed
+
+Output ONLY valid JSON (no markdown):
+{
+  "recommendations": [
+    {
+      "name": "Product name with part number",
+      "brand": "Brand name",
+      "price": { "amount": 99.99, "currency": "USD", "source": "${retailer}" },
+      "url": "RevZilla product URL",
+      "reasoning": "Confirmed to fit ${vehicleInfo} via ${retailer} fitment guide",
+      "pros": ["Pro 1", "Pro 2"],
+      "cons": ["Con 1"],
+      "reviewSummary": "Customer feedback if mentioned"
+    }
+  ],
+  "sources": [{ "title": "${retailer}", "url": "https://www.revzilla.com" }]
+}
+
+Include ALL products found that fit the vehicle.`;
+
+    const structureResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: structurePrompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const jsonText = structureResponse.text || '';
+    console.log('Product structured response:', jsonText.substring(0, 300));
+
+    const parsed = JSON.parse(jsonText);
+
+    const recommendations: ProductRecommendation[] = (parsed.recommendations || []).map(
+      (rec: ProductRecommendation) => ({
+        name: rec.name || 'Unknown Product',
+        brand: rec.brand || 'Unknown',
+        price: rec.price,
+        url: rec.url || '',
+        reasoning: rec.reasoning || '',
+        pros: Array.isArray(rec.pros) ? rec.pros : [],
+        cons: Array.isArray(rec.cons) ? rec.cons : [],
+        reviewSummary: rec.reviewSummary,
+      })
+    );
+
+    // Use grounding sources if no sources in response
+    const sources = parsed.sources?.length > 0
+      ? parsed.sources
+      : sourceUrls.slice(0, 5);
+
     return {
-      recommendations: parsed.recommendations || [],
-      sources: Array.from(sources.entries()).map(([title, url]) => ({ title, url })),
-      hasMoreResults: false,
+      recommendations,
+      sources,
+      hasMoreResults: recommendations.length >= 8,
     };
   } catch (error) {
-    console.error('Error synthesizing recommendations:', error);
-    return createBasicRecommendations(searchResults);
+    console.error('Product finding phase error:', error);
+    return {
+      recommendations: [],
+      sources: [],
+      hasMoreResults: false,
+    };
   }
 }
 
-function createBasicRecommendations(
-  searchResults: TavilySearchResult[]
-): ResearchResult {
-  const recommendations: ProductRecommendation[] = searchResults.slice(0, 10).map((result) => ({
-    name: result.title,
-    brand: extractBrand(result.title),
-    url: result.url,
-    reasoning: result.content.substring(0, 200),
-    pros: ['Found in search results'],
-    cons: ['Verify fitment before purchase'],
-  }));
-
-  const sources = new Map<string, string>();
-  for (const result of searchResults.slice(0, 10)) {
-    const domain = getRetailerName(result.url);
-    if (!sources.has(domain)) {
-      sources.set(domain, result.url);
-    }
-  }
-
-  return {
-    recommendations,
-    sources: Array.from(sources.entries()).map(([title, url]) => ({ title, url })),
-    hasMoreResults: false,
-  };
-}
-
-function extractBrand(title: string): string {
-  // Common brand patterns - extract first capitalized word
-  const words = title.split(/[\s\-–]/);
-  for (const word of words) {
-    if (word.length > 2 && /^[A-Z]/.test(word)) {
-      return word;
-    }
-  }
-  return 'Unknown';
-}
-
-export function formatResearchResponse(
-  result: ResearchResult,
+/**
+ * Format discovery results into a conversational response
+ */
+export function formatDiscoveryResponse(
+  result: DiscoveryResult,
   vehicleContext?: VehicleContext
 ): string {
-  let response = '';
+  const vehicleStr = vehicleContext
+    ? [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(' ')
+    : 'your vehicle';
 
-  if (vehicleContext) {
-    const vehicleStr = [vehicleContext.year, vehicleContext.make, vehicleContext.model]
-      .filter(Boolean)
-      .join(' ');
-    response += `Based on your ${vehicleStr}, here are my recommendations:\n\n`;
-  } else {
-    response += 'Here are my recommendations:\n\n';
+  let response = `Here's what I found about options for your ${vehicleStr}:\n\n`;
+
+  if (result.oemSpec) {
+    response += `OEM Specification: ${result.oemSpec}\n\n`;
   }
 
-  result.recommendations.forEach((rec, index) => {
-    response += `${index + 1}. ${rec.name || 'Unknown Product'}`;
-    if (rec.price && typeof rec.price.amount === 'number') {
-      response += ` ($${rec.price.amount.toFixed(2)})`;
-    }
-    response += '\n';
-    if (rec.reasoning) {
-      response += `   ${rec.reasoning}\n`;
-    }
-    const pros = Array.isArray(rec.pros) ? rec.pros : [];
-    const cons = Array.isArray(rec.cons) ? rec.cons : [];
-    if (pros.length > 0) {
-      response += `   Pros: ${pros.slice(0, 3).join(', ')}\n`;
-    }
-    if (cons.length > 0) {
-      response += `   Cons: ${cons.slice(0, 2).join(', ')}\n`;
-    }
-    if (rec.url) {
-      response += `   [View on ${getRetailerName(rec.url)}](${rec.url})\n`;
-    }
-    response += '\n';
-  });
-
-  if (result.sources.length > 0) {
-    response += '\nSources: ' + result.sources.map((s) => s.title).join(', ');
+  if (result.productTypes.length > 0) {
+    response += 'Your main options:\n\n';
+    result.productTypes.forEach((type, index) => {
+      response += `${index + 1}. ${type.name}`;
+      if (type.priceRange) {
+        response += ` (${type.priceRange})`;
+      }
+      response += `\n   ${type.description}\n`;
+      if (type.prosAndCons) {
+        if (type.prosAndCons.pros?.length) {
+          response += `   Pros: ${type.prosAndCons.pros.join(', ')}\n`;
+        }
+        if (type.prosAndCons.cons?.length) {
+          response += `   Cons: ${type.prosAndCons.cons.join(', ')}\n`;
+        }
+      }
+      response += '\n';
+    });
   }
+
+  if (result.keyConsiderations.length > 0) {
+    response += 'Things to consider:\n';
+    result.keyConsiderations.forEach(consideration => {
+      response += `- ${consideration}\n`;
+    });
+    response += '\n';
+  }
+
+  if (result.popularBrands.length > 0) {
+    response += `Popular brands: ${result.popularBrands.join(', ')}\n\n`;
+  }
+
+  response += 'Which type interests you? Or should I show you all options?';
 
   return response;
 }
