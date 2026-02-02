@@ -164,8 +164,36 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
         let searchQuery = message;
         let previousProducts: string[] = [];
         const isFollowUp = /other|more|else|different|alternative/i.test(message.toLowerCase());
+        const isLinkRequest = /get.*link|find.*link|link to|where.*buy|where.*get|buy it|order it|shop for/i.test(message.toLowerCase());
 
-        if (isFollowUp && recentMessages?.length) {
+        // Check if user is asking for a link to a specific product mentioned in the message
+        // e.g., "get me a link to the rotella" should search for "rotella"
+        if (isLinkRequest && recentMessages?.length) {
+          // Extract product name from the current message if present
+          // Common patterns: "link to the X", "buy X", "get X"
+          const productInMessage = message.match(/(?:link to(?: the)?|buy|get|order|find)\s+(?:the\s+)?([a-zA-Z0-9][\w\s-]*?)(?:\s*$|\s+for|\s+on)/i);
+
+          if (productInMessage && productInMessage[1] && productInMessage[1].trim().length > 2) {
+            // User specified a product in their message - search for it directly
+            const productName = productInMessage[1].trim();
+            searchQuery = `${productName} buy purchase`;
+          } else {
+            // User said something vague like "where do I buy it?" - look in chat history
+            // Find what product/brand was discussed recently
+            for (const msg of [...recentMessages].reverse()) {
+              if (msg.role === 'assistant') {
+                // Look for brand/product mentions in assistant responses
+                // Common patterns: "Rotella T4", "Amsoil", etc.
+                const brandMatches = msg.content.match(/\b(Rotella\s*T[46]?|Amsoil|Mobil\s*1|Castrol|Yamalube|Kawasaki|Honda|Shell|Motul|Maxima|Bel-Ray|Lucas|Valvoline)[\w\s-]*/gi);
+                if (brandMatches && brandMatches.length > 0) {
+                  // Use the most recently mentioned product
+                  searchQuery = `${brandMatches[0].trim()} buy purchase`;
+                  break;
+                }
+              }
+            }
+          }
+        } else if (isFollowUp && recentMessages?.length) {
           // Find the original product query from chat history
           for (const msg of recentMessages) {
             if (msg.role === 'user' && /battery|tire|oil|part|accessory/i.test(msg.content)) {

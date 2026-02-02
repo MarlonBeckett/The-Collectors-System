@@ -34,6 +34,36 @@ const PRODUCT_RESEARCH_INDICATORS = [
   'options',
   'vs',
   'versus',
+  // Needs/new patterns for parts
+  'needs.*battery',
+  'needs.*tire',
+  'needs.*oil',
+  'need.*battery',
+  'need.*tire',
+  'need.*oil',
+  'new battery',
+  'new tire',
+  'new tires',
+  'new oil',
+  // Fix patterns
+  'fix',
+  'repair',
+  'replace',
+  // Direct part mentions (standalone)
+  '\\bbattery\\b',
+  '\\btire\\b',
+  '\\btires\\b',
+  // Link/purchase request patterns
+  'get.*link',
+  'find.*link',
+  'link to',
+  'where can i get',
+  'where to get',
+  'where to buy',
+  'shop for',
+  'order',
+  'amazon',
+  'revzilla',
 ];
 
 // Patterns for follow-up product research (user wants more options)
@@ -157,16 +187,48 @@ export function findVehicleContext(
     (v) => v.name.toLowerCase() === searchTerm || v.nickname?.toLowerCase() === searchTerm
   );
 
-  // Try partial match
+  // Try exact model match (most specific)
+  if (!match) {
+    match = vehicles.find(
+      (v) => v.model && searchTerm.includes(v.model.toLowerCase())
+    );
+  }
+
+  // Try nickname partial match
+  if (!match) {
+    match = vehicles.find(
+      (v) => v.nickname?.toLowerCase() && searchTerm.includes(v.nickname.toLowerCase())
+    );
+  }
+
+  // Try name contains search term or vice versa
   if (!match) {
     match = vehicles.find(
       (v) =>
         v.name.toLowerCase().includes(searchTerm) ||
-        searchTerm.includes(v.name.toLowerCase()) ||
-        v.nickname?.toLowerCase().includes(searchTerm) ||
-        (v.model && searchTerm.includes(v.model.toLowerCase())) ||
-        (v.make && searchTerm.includes(v.make.toLowerCase()))
+        searchTerm.includes(v.name.toLowerCase())
     );
+  }
+
+  // Try make + model combination in search term (e.g., "KTM 300XC")
+  if (!match) {
+    match = vehicles.find((v) => {
+      if (v.make && v.model) {
+        const makeModel = `${v.make} ${v.model}`.toLowerCase();
+        return searchTerm.includes(makeModel) || searchTerm.includes(`${v.make.toLowerCase()} ${v.model.toLowerCase()}`);
+      }
+      return false;
+    });
+  }
+
+  // Last resort: make-only match, but only if there's exactly one vehicle of that make
+  if (!match) {
+    const makeMatches = vehicles.filter(
+      (v) => v.make && searchTerm.includes(v.make.toLowerCase())
+    );
+    if (makeMatches.length === 1) {
+      match = makeMatches[0];
+    }
   }
 
   if (match) {

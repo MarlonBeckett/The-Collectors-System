@@ -249,6 +249,7 @@ export default function ChatPage() {
   };
 
   // Check if a message is likely a product research query
+  // Keep in sync with src/lib/chat/intentClassifier.ts PRODUCT_RESEARCH_INDICATORS
   const isProductResearchQuery = (msg: string) => {
     const lowerMsg = msg.toLowerCase();
     const researchPatterns = [
@@ -256,7 +257,19 @@ export default function ChatPage() {
       'what.*battery', 'what.*tire', 'what.*oil', 'which.*should',
       'where.*buy', 'price', 'compare', 'review', 'upgrade',
       'replacement', 'part', 'parts', 'accessory', 'accessories',
-      'other option', 'more option', 'alternative', 'what else'
+      'other option', 'more option', 'alternative', 'what else',
+      // Needs/new patterns for parts
+      'needs.*battery', 'needs.*tire', 'needs.*oil',
+      'need.*battery', 'need.*tire', 'need.*oil',
+      'new battery', 'new tire', 'new tires', 'new oil',
+      // Fix patterns
+      'fix', 'repair', 'replace',
+      // Direct part mentions
+      '\\bbattery\\b', '\\btire\\b', '\\btires\\b',
+      // Link/purchase request patterns
+      'get.*link', 'find.*link', 'link to', 'where can i get',
+      'where to get', 'where to buy', 'shop for', 'order',
+      'amazon', 'revzilla'
     ];
     return researchPatterns.some(pattern => new RegExp(pattern, 'i').test(lowerMsg));
   };
