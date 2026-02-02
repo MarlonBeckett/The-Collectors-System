@@ -22,10 +22,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { message, sessionId } = await request.json();
+    const { message, sessionId, collectionId } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    if (!collectionId) {
+      return NextResponse.json({ error: 'Collection is required' }, { status: 400 });
     }
 
     // Get or create session
@@ -40,10 +44,11 @@ export async function POST(request: NextRequest) {
       currentSessionId = newSession?.id;
     }
 
-    // Get user's vehicles with detailed info for context
+    // Get user's vehicles with detailed info for context (filtered by collection)
     const { data: vehicles } = await supabase
       .from('motorcycles')
       .select('*')
+      .eq('collection_id', collectionId)
       .order('name');
 
     // Get recent chat history for this session

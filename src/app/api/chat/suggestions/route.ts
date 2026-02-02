@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { daysUntilExpiration } from '@/lib/dateUtils';
 import { Motorcycle } from '@/types/database';
@@ -108,9 +108,11 @@ function generateSuggestions(context: SuggestionContext): string[] {
   return suggestions.slice(0, 4);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const collectionId = searchParams.get('collectionId');
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -125,11 +127,17 @@ export async function GET() {
       });
     }
 
-    // Get user's vehicles
-    const { data: vehicles } = await supabase
+    // Get user's vehicles (filtered by collection if provided)
+    let vehicleQuery = supabase
       .from('motorcycles')
       .select('*')
       .order('updated_at', { ascending: false });
+
+    if (collectionId) {
+      vehicleQuery = vehicleQuery.eq('collection_id', collectionId);
+    }
+
+    const { data: vehicles } = await vehicleQuery;
 
     const allVehicles = (vehicles || []) as Motorcycle[];
     const activeVehicles = allVehicles.filter(v => v.status === 'active' || v.status === 'maintenance');

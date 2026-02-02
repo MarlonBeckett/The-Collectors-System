@@ -16,11 +16,21 @@ import {
   XMarkIcon,
   PlusIcon,
   ChatBubbleLeftIcon,
+  ChevronDownIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 
 // Session storage keys for persisting chat state
 const STORAGE_KEY_SESSION = 'chat_current_session';
 const STORAGE_KEY_DRAFT = 'chat_draft_input';
+// Use the same key as dashboard for shared collection memory
+const STORAGE_KEY_COLLECTION = 'selectedCollectionId';
+
+interface CollectionOption {
+  id: string;
+  name: string;
+  is_owner: boolean;
+}
 
 export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -33,11 +43,15 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [collectionDropdownOpen, setCollectionDropdownOpen] = useState(false);
+  const collectionDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const skipNextMessageLoad = useRef(false);
   const supabase = createClient();
 
-  // Initialize from session storage
+  // Initialize from session storage and load collections
   useEffect(() => {
     const savedSessionId = sessionStorage.getItem(STORAGE_KEY_SESSION);
     const savedDraft = sessionStorage.getItem(STORAGE_KEY_DRAFT);
@@ -46,16 +60,60 @@ export default function ChatPage() {
       setInput(savedDraft);
     }
 
-    // Load sessions, then determine which one to show
-    loadSessions(savedSessionId);
+    // Load collections first, then sessions
+    loadCollections().then((loadedCollections) => {
+      // Get selected collection from localStorage (shared with dashboard)
+      const storedCollectionId = localStorage.getItem(STORAGE_KEY_COLLECTION);
+      let collectionId: string | null = null;
 
-    // Load personalized suggestions
-    loadSuggestions();
+      if (storedCollectionId && loadedCollections.some((c: CollectionOption) => c.id === storedCollectionId)) {
+        collectionId = storedCollectionId;
+      } else if (loadedCollections.length > 0) {
+        collectionId = loadedCollections[0].id;
+      }
+
+      setSelectedCollectionId(collectionId);
+
+      // Load sessions and suggestions after collection is set
+      loadSessions(savedSessionId);
+      if (collectionId) {
+        loadSuggestions(collectionId);
+      }
+    });
   }, []);
 
-  const loadSuggestions = async () => {
+  // Close collection dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (collectionDropdownRef.current && !collectionDropdownRef.current.contains(event.target as Node)) {
+        setCollectionDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadCollections = async (): Promise<CollectionOption[]> => {
+    const { data } = await supabase.rpc('get_user_collections');
+    if (data) {
+      const options: CollectionOption[] = data.map((c: { id: string; name: string; is_owner: boolean }) => ({
+        id: c.id,
+        name: c.name,
+        is_owner: c.is_owner,
+      }));
+      setCollections(options);
+      return options;
+    }
+    return [];
+  };
+
+  const loadSuggestions = async (collectionId?: string) => {
     try {
-      const response = await fetch('/api/chat/suggestions');
+      const url = collectionId
+        ? `/api/chat/suggestions?collectionId=${collectionId}`
+        : '/api/chat/suggestions';
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (data.suggestions?.length > 0) {
@@ -154,6 +212,20 @@ export default function ChatPage() {
     setCurrentSessionId(null);
     setMessages([]);
     setSidebarOpen(false);
+    // Reload suggestions for the current collection
+    if (selectedCollectionId) {
+      loadSuggestions(selectedCollectionId);
+    }
+  };
+
+  const handleCollectionChange = (collectionId: string) => {
+    setSelectedCollectionId(collectionId);
+    setCollectionDropdownOpen(false);
+    // Note: We don't save to localStorage here - only the main dashboard selector updates the memory
+    // Clear current chat and reload suggestions for the new collection
+    setCurrentSessionId(null);
+    setMessages([]);
+    loadSuggestions(collectionId);
   };
 
   const handleSelectSession = (sessionId: string) => {
@@ -219,7 +291,7 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, sessionId: currentSessionId }),
+        body: JSON.stringify({ message: userMessage, sessionId: currentSessionId, collectionId: selectedCollectionId }),
       });
 
       const data = await response.json();
@@ -286,7 +358,7 @@ export default function ChatPage() {
 
   return (
     <AppShell>
-      <div className="flex h-[calc(100dvh-8rem)] w-full relative">
+      <div className="flex h-[calc(100dvh-9rem)] w-full relative">
         {/* Sidebar Overlay */}
         {sidebarOpen && (
           <div
@@ -375,7 +447,41 @@ export default function ChatPage() {
                   ? sessions.find(s => s.id === currentSessionId)?.title || 'Chat'
                   : 'New Chat'}
               </h1>
-              <p className="text-xs text-muted-foreground">Ask questions about your collection</p>
+              {/* Collection selector - inline dropdown */}
+              {collections.length > 1 ? (
+                <div className="relative" ref={collectionDropdownRef}>
+                  <button
+                    onClick={() => setCollectionDropdownOpen(!collectionDropdownOpen)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {collections.find(c => c.id === selectedCollectionId)?.name || 'Select collection'}
+                    <ChevronDownIcon className={`w-3 h-3 transition-transform ${collectionDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {collectionDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-48 bg-card border border-border shadow-lg z-50">
+                      {collections.map((collection) => (
+                        <button
+                          key={collection.id}
+                          onClick={() => handleCollectionChange(collection.id)}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="font-medium">{collection.name}</div>
+                            {!collection.is_owner && (
+                              <div className="text-xs text-muted-foreground">Shared with you</div>
+                            )}
+                          </div>
+                          {collection.id === selectedCollectionId && (
+                            <CheckIcon className="w-4 h-4 text-primary" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Ask questions about your collection</p>
+              )}
             </div>
           </div>
 
@@ -483,13 +589,13 @@ export default function ChatPage() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your collection..."
-                disabled={loading}
+                placeholder={selectedCollectionId ? "Ask about your collection..." : "Select a collection to start..."}
+                disabled={loading || !selectedCollectionId}
                 className="flex-1 px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={loading || !input.trim()}
+                disabled={loading || !input.trim() || !selectedCollectionId}
                 className="min-h-[44px] px-4 py-3 bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PaperAirplaneIcon className="w-5 h-5" />

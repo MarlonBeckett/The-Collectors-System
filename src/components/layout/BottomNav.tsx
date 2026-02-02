@@ -51,8 +51,8 @@ export function BottomNav() {
   const navItems = allNavItems.filter(item => !item.requiresEditAccess || canEdit);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 pb-safe">
-      <div className="flex items-center justify-around h-16">
+    <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+      <div className="flex items-center justify-around h-20">
         {navItems.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== '/' && pathname.startsWith(item.href));
