@@ -7,13 +7,11 @@ import { createClient } from '@/lib/supabase/client';
 import {
   HomeIcon,
   PlusCircleIcon,
-  ChatBubbleLeftRightIcon,
   Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 import {
   HomeIcon as HomeIconSolid,
   PlusCircleIcon as PlusCircleIconSolid,
-  ChatBubbleLeftRightIcon as ChatBubbleLeftRightIconSolid,
   Cog6ToothIcon as Cog6ToothIconSolid,
 } from '@heroicons/react/24/solid';
 
@@ -28,7 +26,6 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { href: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconSolid },
   { href: '/vehicles/new', label: 'Add', icon: PlusCircleIcon, activeIcon: PlusCircleIconSolid, requiresEditAccess: true },
-  { href: '/chat', label: 'Chat', icon: ChatBubbleLeftRightIcon, activeIcon: ChatBubbleLeftRightIconSolid },
   { href: '/settings', label: 'Settings', icon: Cog6ToothIcon, activeIcon: Cog6ToothIconSolid },
 ];
 
