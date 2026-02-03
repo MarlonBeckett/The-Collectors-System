@@ -2,6 +2,22 @@
 
 import { ProductRecommendation } from '@/types/research';
 
+interface StarIconProps {
+  filled: boolean;
+}
+
+function StarIcon({ filled }: StarIconProps) {
+  return (
+    <svg
+      className={`w-3 h-3 ${filled ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+    >
+      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+    </svg>
+  );
+}
+
 interface ProductCardProps {
   product: ProductRecommendation;
   rank?: number;
@@ -27,14 +43,65 @@ export function ProductCard({ product, rank }: ProductCardProps) {
                 {product.name || 'Unknown Product'}
               </h4>
               <p className="text-xs text-muted-foreground">{product.brand || ''}</p>
+
+              {/* Rating and review count */}
+              {product.rating !== undefined && product.rating > 0 && (
+                <div className="flex items-center gap-1 mt-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <StarIcon key={star} filled={star <= Math.round(product.rating!)} />
+                  ))}
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {product.rating.toFixed(1)}
+                  </span>
+                  {product.reviewCount !== undefined && product.reviewCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      ({product.reviewCount.toLocaleString()} reviews)
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Badges row */}
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {/* Fitment verified badge */}
+                {product.fitmentVerified && (
+                  <span className="inline-flex items-center text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded">
+                    <svg
+                      className="w-3 h-3 mr-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    Verified Fit
+                  </span>
+                )}
+
+                {/* Retailer badge */}
+                {product.retailer && (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                    via {product.retailer}
+                  </span>
+                )}
+
+                {/* In stock / Out of stock */}
+                {product.inStock === false && (
+                  <span className="text-xs text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded">
+                    Out of Stock
+                  </span>
+                )}
+              </div>
             </div>
-            {product.price && typeof product.price.amount === 'number' && (
+            {product.price !== undefined && product.price > 0 && (
               <div className="text-right flex-shrink-0">
                 <p className="font-bold text-primary">
-                  ${product.price.amount.toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {product.price.source || ''}
+                  ${product.price.toFixed(2)}
                 </p>
               </div>
             )}
@@ -114,19 +181,38 @@ export function ProductCard({ product, rank }: ProductCardProps) {
 
 interface ProductListProps {
   recommendations: ProductRecommendation[];
-  additionalProducts?: ProductRecommendation[];
   sources?: { url: string; title: string }[];
 }
 
-export function ProductList({
-  recommendations,
-  sources,
-}: ProductListProps) {
+export function ProductList({ recommendations, sources }: ProductListProps) {
+  // Separate products with reasoning (top picks) from those without (more options)
+  const topPicks = recommendations.filter((p) => p.reasoning);
+  const moreOptions = recommendations.filter((p) => !p.reasoning);
+
   return (
     <div className="mt-2">
-      {recommendations.map((product, index) => (
+      {/* Top picks - always shown expanded */}
+      {topPicks.map((product, index) => (
         <ProductCard key={index} product={product} rank={index + 1} />
       ))}
+
+      {/* More options - collapsible if there are many */}
+      {moreOptions.length > 0 && (
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+            Show {moreOptions.length} more option{moreOptions.length > 1 ? 's' : ''}
+          </summary>
+          <div className="mt-2">
+            {moreOptions.map((product, index) => (
+              <ProductCard
+                key={topPicks.length + index}
+                product={product}
+                rank={topPicks.length + index + 1}
+              />
+            ))}
+          </div>
+        </details>
+      )}
 
       {sources && sources.length > 0 && (
         <div className="mt-4 pt-3 border-t border-border">

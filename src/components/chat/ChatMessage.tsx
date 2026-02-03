@@ -16,9 +16,13 @@ interface VehicleContext {
   name?: string;
 }
 
-// Extract research result if present
+// Extract research result if present (supports both old and new metadata types)
 function getResearchResult(metadata?: Record<string, unknown>): ResearchResult | null {
-  if (metadata?.type === 'product_research' && metadata?.researchResult) {
+  // Support both 'product_research' (old) and 'product_search' (new) types
+  if (
+    (metadata?.type === 'product_research' || metadata?.type === 'product_search') &&
+    metadata?.researchResult
+  ) {
     const result = metadata.researchResult as ResearchResult;
     // Validate that recommendations is an array
     if (!Array.isArray(result.recommendations)) {
@@ -40,13 +44,15 @@ function getVehicleContext(metadata?: Record<string, unknown>): VehicleContext |
 // Build intro text based on vehicle context
 function buildIntroText(vehicleContext: VehicleContext | null): string {
   if (vehicleContext) {
-    const parts = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean);
+    const parts = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(
+      Boolean
+    );
     const vehicleStr = parts.length > 0 ? parts.join(' ') : vehicleContext.name;
     if (vehicleStr) {
-      return `Based on your ${vehicleStr}, here are my top recommendations:`;
+      return `Here are products for your ${vehicleStr}. Please verify fitment on each product page before ordering:`;
     }
   }
-  return 'Here are my top recommendations:';
+  return 'Here are the products I found. Please verify fitment before ordering:';
 }
 
 // Get a friendly display name for a URL
@@ -117,17 +123,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const researchResult = getResearchResult(message.metadata);
   const vehicleContext = getVehicleContext(message.metadata);
 
-  // Debug logging - always log for assistant messages
-  if (!isUser) {
-    console.log('ChatMessage for assistant - has metadata:', !!message.metadata);
-    console.log('ChatMessage metadata:', message.metadata);
-    console.log('Research result extracted:', researchResult);
-  }
-
-  // For product research messages, render structured cards
+  // For product search messages, render structured cards
   if (!isUser && researchResult) {
-    console.log('RENDERING PRODUCT CARDS for', researchResult.recommendations.length, 'products');
-    // Build intro text from vehicle context (from metadata, not parsing content)
+    // Build intro text from vehicle context
     const introText = buildIntroText(vehicleContext);
 
     return (
@@ -139,7 +137,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
             sources={researchResult.sources}
           />
           <p className="text-xs mt-3 text-muted-foreground">
-            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </p>
         </div>
       </div>
@@ -156,9 +157,16 @@ export function ChatMessage({ message }: ChatMessageProps) {
             : 'bg-card border border-border text-card-foreground'
         }`}
       >
-        <p className="text-sm whitespace-pre-wrap">{renderContentWithLinks(message.content, isUser)}</p>
-        <p className={`text-xs mt-2 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-          {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <p className="text-sm whitespace-pre-wrap">
+          {renderContentWithLinks(message.content, isUser)}
+        </p>
+        <p
+          className={`text-xs mt-2 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}
+        >
+          {new Date(message.created_at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
         </p>
       </div>
     </div>

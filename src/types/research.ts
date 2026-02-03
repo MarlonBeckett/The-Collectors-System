@@ -1,12 +1,19 @@
 export interface ProductRecommendation {
   name: string;
   brand: string;
-  price?: { amount: number; currency: string; source: string };
+  price?: number;
+  currency?: string;
   url: string;
-  reasoning: string;
-  pros: string[];
-  cons: string[];
-  reviewSummary?: string;
+  imageUrl?: string;
+  rating?: number; // 0-5 scale
+  reviewCount?: number;
+  inStock?: boolean;
+  retailer?: string; // "RevZilla", "CycleGear", etc.
+  fitmentVerified?: boolean;
+  reasoning?: string; // AI-generated explanation
+  pros?: string[]; // AI-generated from analysis
+  cons?: string[]; // AI-generated from analysis
+  reviewSummary?: string; // AI-generated from reviews
 }
 
 export interface ResearchResult {
@@ -30,17 +37,4 @@ export interface VehicleContext {
 export interface ResearchProgress {
   step: string;
   detail?: string;
-}
-
-export interface TavilySearchResult {
-  title: string;
-  url: string;
-  content: string;
-  score: number;
-  publishedDate?: string;
-}
-
-export interface TavilyResponse {
-  results: TavilySearchResult[];
-  query: string;
 }
