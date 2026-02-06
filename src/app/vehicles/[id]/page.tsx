@@ -2,9 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { PhotoGallery } from '@/components/photos/PhotoGallery';
 import { formatSaleInfo } from '@/lib/statusParser';
-import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, CollectionRole } from '@/types/database';
+import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, ServiceRecord, ServiceRecordReceipt, CollectionRole } from '@/types/database';
 import { VehicleStatus } from '@/components/vehicles/VehicleStatus';
 import { MileageSection } from '@/components/vehicles/MileageSection';
+import { ServiceRecordsSection } from '@/components/vehicles/ServiceRecordsSection';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -78,6 +79,27 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
     .order('recorded_date', { ascending: false });
 
   const mileageHistory = (mileageData || []) as MileageHistory[];
+
+  const { data: serviceData } = await supabase
+    .from('service_records')
+    .select('*')
+    .eq('motorcycle_id', id)
+    .order('service_date', { ascending: false });
+
+  // Fetch receipts for all service records
+  const serviceIds = (serviceData || []).map(s => s.id);
+  const { data: receiptsData } = serviceIds.length > 0
+    ? await supabase
+        .from('service_record_receipts')
+        .select('*')
+        .in('service_record_id', serviceIds)
+    : { data: [] };
+
+  // Attach receipts to their service records
+  const serviceRecords = (serviceData || []).map(record => ({
+    ...record,
+    receipts: (receiptsData || []).filter(r => r.service_record_id === record.id)
+  })) as (ServiceRecord & { receipts: ServiceRecordReceipt[] })[];
 
   // Get user's role for this vehicle's collection
   let canEdit = true; // default to true for backwards compatibility
@@ -175,6 +197,9 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
 
             {/* Mileage - with update button */}
             <MileageSection motorcycleId={vehicle.id} mileageHistory={mileageHistory} canEdit={canEdit} />
+
+            {/* Service History */}
+            <ServiceRecordsSection motorcycleId={vehicle.id} serviceRecords={serviceRecords} canEdit={canEdit} />
 
             {/* Notes */}
             {vehicle.notes && (

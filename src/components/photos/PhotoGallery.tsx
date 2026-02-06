@@ -111,6 +111,7 @@ export function PhotoGallery({ photos, motorcycleName }: PhotoGalleryProps) {
             fill
             className="object-contain"
             sizes="(max-width: 768px) 100vw, 800px"
+            unoptimized
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -162,6 +163,7 @@ export function PhotoGallery({ photos, motorcycleName }: PhotoGalleryProps) {
                   fill
                   className="object-cover"
                   sizes="64px"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full bg-muted animate-pulse" />
@@ -193,6 +195,7 @@ export function PhotoGallery({ photos, motorcycleName }: PhotoGalleryProps) {
             fill
             className="object-contain"
             sizes="100vw"
+            unoptimized
             onClick={(e) => e.stopPropagation()}
           />
 

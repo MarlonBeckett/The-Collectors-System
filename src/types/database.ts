@@ -116,6 +116,36 @@ export interface ValueHistory {
   created_by: string | null;
 }
 
+export type ServiceCategory = 'maintenance' | 'repair' | 'upgrade' | 'inspection';
+
+export interface ServiceRecord {
+  id: string;
+  motorcycle_id: string;
+  service_date: string;
+  title: string;
+  description: string | null;
+  cost: number | null;
+  odometer: number | null;
+  shop_name: string | null;
+  category: ServiceCategory;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface ServiceRecordReceipt {
+  id: string;
+  service_record_id: string;
+  storage_path: string;
+  file_name: string;
+  file_type: string | null;
+  created_at: string;
+  uploaded_by: string | null;
+}
+
+export interface ServiceRecordWithReceipts extends ServiceRecord {
+  receipts: ServiceRecordReceipt[];
+}
+
 export interface ChatSession {
   id: string;
   user_id: string;
@@ -169,6 +199,16 @@ export interface Database {
         Row: MileageHistory;
         Insert: Omit<MileageHistory, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<MileageHistory, 'id' | 'created_at'>>;
+      };
+      service_records: {
+        Row: ServiceRecord;
+        Insert: Omit<ServiceRecord, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<ServiceRecord, 'id' | 'created_at'>>;
+      };
+      service_record_receipts: {
+        Row: ServiceRecordReceipt;
+        Insert: Omit<ServiceRecordReceipt, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<ServiceRecordReceipt, 'id' | 'created_at'>>;
       };
       collections: {
         Row: Collection;

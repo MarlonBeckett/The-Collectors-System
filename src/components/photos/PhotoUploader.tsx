@@ -277,6 +277,7 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
                     fill
                     className="object-cover"
                     sizes="(max-width: 768px) 33vw, 200px"
+                    unoptimized
                   />
                 ) : (
                   <div className="w-full h-full animate-pulse" />
