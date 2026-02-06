@@ -2,10 +2,11 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { PhotoGallery } from '@/components/photos/PhotoGallery';
 import { formatSaleInfo } from '@/lib/statusParser';
-import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, ServiceRecord, ServiceRecordReceipt, CollectionRole } from '@/types/database';
+import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, ServiceRecord, ServiceRecordReceipt, VehicleDocument, CollectionRole } from '@/types/database';
 import { VehicleStatus } from '@/components/vehicles/VehicleStatus';
 import { MileageSection } from '@/components/vehicles/MileageSection';
 import { ServiceRecordsSection } from '@/components/vehicles/ServiceRecordsSection';
+import { DocumentsSection } from '@/components/vehicles/DocumentsSection';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -100,6 +101,15 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
     ...record,
     receipts: (receiptsData || []).filter(r => r.service_record_id === record.id)
   })) as (ServiceRecord & { receipts: ServiceRecordReceipt[] })[];
+
+  // Fetch documents
+  const { data: documentsData } = await supabase
+    .from('vehicle_documents')
+    .select('*')
+    .eq('motorcycle_id', id)
+    .order('created_at', { ascending: false });
+
+  const documents = (documentsData || []) as VehicleDocument[];
 
   // Get user's role for this vehicle's collection
   let canEdit = true; // default to true for backwards compatibility
@@ -200,6 +210,9 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
 
             {/* Service History */}
             <ServiceRecordsSection motorcycleId={vehicle.id} serviceRecords={serviceRecords} canEdit={canEdit} />
+
+            {/* Documents */}
+            <DocumentsSection motorcycleId={vehicle.id} documents={documents} canEdit={canEdit} />
 
             {/* Notes */}
             {vehicle.notes && (

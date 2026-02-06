@@ -118,6 +118,22 @@ export interface ValueHistory {
 
 export type ServiceCategory = 'maintenance' | 'repair' | 'upgrade' | 'inspection';
 
+export type DocumentType = 'title' | 'registration' | 'insurance' | 'receipt' | 'manual' | 'other';
+
+export interface VehicleDocument {
+  id: string;
+  motorcycle_id: string;
+  title: string;
+  document_type: DocumentType;
+  expiration_date: string | null;
+  notes: string | null;
+  storage_path: string;
+  file_name: string;
+  file_type: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
 export interface ServiceRecord {
   id: string;
   motorcycle_id: string;
@@ -209,6 +225,11 @@ export interface Database {
         Row: ServiceRecordReceipt;
         Insert: Omit<ServiceRecordReceipt, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<ServiceRecordReceipt, 'id' | 'created_at'>>;
+      };
+      vehicle_documents: {
+        Row: VehicleDocument;
+        Insert: Omit<VehicleDocument, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<VehicleDocument, 'id' | 'created_at'>>;
       };
       collections: {
         Row: Collection;
