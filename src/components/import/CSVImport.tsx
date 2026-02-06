@@ -14,8 +14,15 @@ interface UserCollection {
   is_owner: boolean;
 }
 
+interface SubscriptionInfo {
+  isPro: boolean;
+  vehicleCount: number;
+  vehicleLimit: number;
+}
+
 interface CSVImportProps {
   collections: UserCollection[];
+  subscriptionInfo: SubscriptionInfo;
 }
 
 interface CSVRow {
@@ -82,7 +89,7 @@ const fieldLabels: Record<keyof ColumnMapping, string> = {
   maintenance_notes: 'Maintenance Notes',
 };
 
-export function CSVImport({ collections }: CSVImportProps) {
+export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -90,6 +97,7 @@ export function CSVImport({ collections }: CSVImportProps) {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
   const [step, setStep] = useState<'upload' | 'map' | 'preview' | 'done'>('upload');
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   // Default to first owned collection, or first collection if none owned
   const defaultCollection = collections.find(c => c.is_owner) || collections[0];
@@ -191,6 +199,8 @@ export function CSVImport({ collections }: CSVImportProps) {
   });
 
   const generatePreview = () => {
+    setLimitError(null);
+
     const previewRows: PreviewRow[] = csvData.map((row) => {
       const name = mapping.name ? row[mapping.name]?.trim() : '';
 
@@ -288,6 +298,24 @@ export function CSVImport({ collections }: CSVImportProps) {
         valid: true,
       };
     });
+
+    // Check subscription limits for free users
+    const validRowCount = previewRows.filter(r => r.valid).length;
+    if (!subscriptionInfo.isPro) {
+      const remainingSlots = subscriptionInfo.vehicleLimit - subscriptionInfo.vehicleCount;
+      if (validRowCount > remainingSlots) {
+        if (remainingSlots <= 0) {
+          setLimitError(
+            `You've reached the free limit of ${subscriptionInfo.vehicleLimit} vehicles. Upgrade to Pro for unlimited vehicles.`
+          );
+        } else {
+          setLimitError(
+            `You can only add ${remainingSlots} more vehicle${remainingSlots === 1 ? '' : 's'} on the free plan. ` +
+            `This import has ${validRowCount} vehicles.`
+          );
+        }
+      }
+    }
 
     setPreview(previewRows);
     setStep('preview');
@@ -507,10 +535,22 @@ export function CSVImport({ collections }: CSVImportProps) {
             </div>
           </div>
 
+          {limitError && (
+            <div className="bg-destructive/10 border border-destructive text-destructive p-4">
+              <p className="text-sm font-medium">{limitError}</p>
+              <a
+                href="/settings#subscription"
+                className="text-sm underline mt-2 inline-block"
+              >
+                Upgrade to Pro
+              </a>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={handleImport}
-              disabled={importing || preview.filter((r) => r.valid).length === 0}
+              disabled={importing || preview.filter((r) => r.valid).length === 0 || !!limitError}
               className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50"
             >
               {importing ? 'Importing...' : `Import ${preview.filter((r) => r.valid).length} Vehicles`}
@@ -546,7 +586,7 @@ export function CSVImport({ collections }: CSVImportProps) {
 
           <div className="flex gap-3">
             <a
-              href="/"
+              href="/dashboard"
               className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold text-center hover:opacity-90"
             >
               View Collection

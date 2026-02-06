@@ -7,8 +7,11 @@ import { User } from '@supabase/supabase-js';
 import { Profile } from '@/types/database';
 import { CollectionSettings } from '@/components/settings/CollectionSettings';
 import { JoinCollection } from '@/components/settings/JoinCollection';
+import SubscriptionSettings from '@/components/settings/SubscriptionSettings';
+import DangerZone from '@/components/settings/DangerZone';
 import { createClient } from '@/lib/supabase/client';
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PencilIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import type { Subscription } from '@/lib/subscription';
 
 interface UserCollection {
   id: string;
@@ -25,12 +28,16 @@ interface SettingsContentProps {
   user: User;
   profile: Profile | null;
   collections: UserCollection[];
+  subscription: Subscription | null;
+  vehicleCount: number;
 }
 
 export function SettingsContent({
   user,
   profile,
   collections,
+  subscription,
+  vehicleCount,
 }: SettingsContentProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -96,6 +103,11 @@ export function SettingsContent({
 
   return (
     <div className="space-y-8">
+      {/* Subscription Section */}
+      <section>
+        <SubscriptionSettings subscription={subscription} vehicleCount={vehicleCount} />
+      </section>
+
       {/* Account Section */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Account</h2>
@@ -297,11 +309,14 @@ export function SettingsContent({
       <section className="pt-4 border-t border-border">
         <button
           onClick={handleSignOut}
-          className="text-destructive hover:underline"
+          className="text-muted-foreground hover:text-foreground hover:underline"
         >
           Sign Out
         </button>
       </section>
+
+      {/* Danger Zone */}
+      <DangerZone subscription={subscription} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { redirect } from 'next/navigation';
 import { SettingsContent } from './SettingsContent';
+import { getUserSubscription } from '@/lib/subscription.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,23 @@ export default async function SettingsPage() {
     .eq('id', user.id)
     .single();
 
+  // Get subscription
+  const subscription = await getUserSubscription();
+
+  // Get total vehicle count across all owned collections
+  const ownedCollectionIds = (collectionsData || [])
+    .filter((c: UserCollection) => c.is_owner)
+    .map((c: UserCollection) => c.id);
+
+  let vehicleCount = 0;
+  if (ownedCollectionIds.length > 0) {
+    const { count } = await supabase
+      .from('motorcycles')
+      .select('*', { count: 'exact', head: true })
+      .in('collection_id', ownedCollectionIds);
+    vehicleCount = count || 0;
+  }
+
   return (
     <AppShell>
       <div className="max-w-2xl mx-auto px-4 py-6">
@@ -48,6 +66,8 @@ export default async function SettingsPage() {
           user={user}
           profile={profile}
           collections={collections}
+          subscription={subscription}
+          vehicleCount={vehicleCount}
         />
       </div>
     </AppShell>

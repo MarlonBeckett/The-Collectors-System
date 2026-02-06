@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Motorcycle } from '@/types/database';
 import { VehicleList } from './VehicleList';
 import { CollectionSwitcher, CollectionOption } from './CollectionSwitcher';
+import UpgradeBanner from '@/components/subscription/UpgradeBanner';
 
 interface UserCollection {
   id: string;
@@ -16,14 +17,21 @@ interface UserCollection {
   created_at: string;
 }
 
+interface SubscriptionInfo {
+  isPro: boolean;
+  vehicleCount: number;
+  vehicleLimit: number;
+}
+
 interface DashboardContentProps {
   collections: UserCollection[];
   vehicles: Motorcycle[];
+  subscriptionInfo: SubscriptionInfo;
 }
 
 const STORAGE_KEY = 'selectedCollectionId';
 
-export function DashboardContent({ collections, vehicles }: DashboardContentProps) {
+export function DashboardContent({ collections, vehicles, subscriptionInfo }: DashboardContentProps) {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -83,6 +91,12 @@ export function DashboardContent({ collections, vehicles }: DashboardContentProp
           {filteredVehicles.length} vehicle{filteredVehicles.length !== 1 ? 's' : ''} in this collection
         </p>
       </div>
+
+      {!subscriptionInfo.isPro && (
+        <div className="mb-6">
+          <UpgradeBanner vehicleCount={subscriptionInfo.vehicleCount} />
+        </div>
+      )}
 
       <VehicleList vehicles={filteredVehicles} />
     </div>

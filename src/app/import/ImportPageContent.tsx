@@ -16,8 +16,15 @@ interface UserCollection {
   is_owner: boolean;
 }
 
+interface SubscriptionInfo {
+  isPro: boolean;
+  vehicleCount: number;
+  vehicleLimit: number;
+}
+
 interface ImportPageContentProps {
   collections: UserCollection[];
+  subscriptionInfo: SubscriptionInfo;
 }
 
 const AI_PROMPT = `I need help preparing my vehicle collection for import into The Collectors System app.
@@ -148,7 +155,7 @@ function AIPromptHelper() {
   );
 }
 
-function ImportTabs({ collections }: ImportPageContentProps) {
+function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState<Tab>(
@@ -167,7 +174,7 @@ function ImportTabs({ collections }: ImportPageContentProps) {
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-center gap-4 mb-6">
         <Link
-          href="/"
+          href="/dashboard"
           className="p-2 hover:bg-muted transition-colors"
         >
           <ArrowLeftIcon className="w-5 h-5" />
@@ -236,7 +243,7 @@ function ImportTabs({ collections }: ImportPageContentProps) {
               </ul>
             </div>
 
-            <CSVImport collections={collections} />
+            <CSVImport collections={collections} subscriptionInfo={subscriptionInfo} />
           </>
         )}
 
@@ -264,14 +271,14 @@ function ImportTabs({ collections }: ImportPageContentProps) {
   );
 }
 
-export function ImportPageContent({ collections }: ImportPageContentProps) {
+export function ImportPageContent({ collections, subscriptionInfo }: ImportPageContentProps) {
   return (
     <Suspense fallback={
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="text-center text-muted-foreground">Loading...</div>
       </div>
     }>
-      <ImportTabs collections={collections} />
+      <ImportTabs collections={collections} subscriptionInfo={subscriptionInfo} />
     </Suspense>
   );
 }

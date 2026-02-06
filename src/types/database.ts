@@ -2,6 +2,22 @@ export type MotorcycleStatus = 'active' | 'sold' | 'traded' | 'maintenance';
 
 export type VehicleType = 'motorcycle' | 'car' | 'boat' | 'trailer' | 'other';
 
+export type SubscriptionStatus = 'free' | 'active' | 'canceled' | 'past_due';
+export type SubscriptionPlan = 'monthly' | 'annual';
+
+export interface Subscription {
+  id: string;
+  user_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: SubscriptionStatus;
+  plan: SubscriptionPlan | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SaleInfo {
   date?: string;
   amount?: number;
@@ -249,9 +265,16 @@ export interface Database {
         Insert: Omit<CollectionMember, 'id' | 'joined_at'> & { id?: string };
         Update: Partial<Omit<CollectionMember, 'id' | 'joined_at'>>;
       };
+      subscriptions: {
+        Row: Subscription;
+        Insert: Omit<Subscription, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<Subscription, 'id' | 'created_at' | 'updated_at'>>;
+      };
     };
     Enums: {
       motorcycle_status: MotorcycleStatus;
+      subscription_status: SubscriptionStatus;
+      subscription_plan: SubscriptionPlan;
     };
   };
 }

@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ImportPageContent } from './ImportPageContent';
+import { getUserSubscription } from '@/lib/subscription.server';
+import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +31,7 @@ export default async function ImportPage() {
 
   // If user has no editable collections, redirect
   if (editableCollections.length === 0) {
-    redirect('/');
+    redirect('/dashboard');
   }
 
   const collections = editableCollections.map(c => ({
@@ -38,9 +40,33 @@ export default async function ImportPage() {
     is_owner: c.is_owner,
   }));
 
+  // Get subscription info for vehicle limits
+  const subscription = await getUserSubscription();
+  const isProUser = isPro(subscription);
+
+  // Get owned collection IDs to count vehicles
+  const ownedCollectionIds = allCollections
+    .filter(c => c.is_owner)
+    .map(c => c.id);
+
+  let vehicleCount = 0;
+  if (ownedCollectionIds.length > 0) {
+    const { count } = await supabase
+      .from('motorcycles')
+      .select('*', { count: 'exact', head: true })
+      .in('collection_id', ownedCollectionIds);
+    vehicleCount = count || 0;
+  }
+
+  const subscriptionInfo = {
+    isPro: isProUser,
+    vehicleCount,
+    vehicleLimit: FREE_VEHICLE_LIMIT,
+  };
+
   return (
     <AppShell>
-      <ImportPageContent collections={collections} />
+      <ImportPageContent collections={collections} subscriptionInfo={subscriptionInfo} />
     </AppShell>
   );
 }
