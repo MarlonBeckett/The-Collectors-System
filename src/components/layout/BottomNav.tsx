@@ -24,7 +24,7 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { href: '/', label: 'Home', icon: HomeIcon, activeIcon: HomeIconSolid },
+  { href: '/dashboard', label: 'Home', icon: HomeIcon, activeIcon: HomeIconSolid },
   { href: '/vehicles/new', label: 'Add', icon: PlusCircleIcon, activeIcon: PlusCircleIconSolid, requiresEditAccess: true },
   { href: '/settings', label: 'Settings', icon: Cog6ToothIcon, activeIcon: Cog6ToothIconSolid },
 ];
