@@ -125,26 +125,63 @@ export default function SubscriptionSettings({
           </div>
         </div>
 
-        {isProUser ? (
+        {isProUser && !subscription?.cancel_at_period_end ? (
           <div className="border-t border-border pt-4 mt-4">
-            {subscription?.cancel_at_period_end ? (
-              <>
+            <p className="text-sm text-muted-foreground mb-1">Next billing date</p>
+            <p className="font-medium text-foreground">
+              {formatDate(subscription?.current_period_end ?? null)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Manage your subscription in the Danger Zone below
+            </p>
+          </div>
+        ) : isProUser && subscription?.cancel_at_period_end ? (
+          <div className="border-t border-border pt-4 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
                 <p className="text-sm text-muted-foreground mb-1">Access ends</p>
                 <p className="font-medium text-orange-500">
                   {formatDate(subscription?.current_period_end ?? null)}
                 </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground mb-1">Next billing date</p>
-                <p className="font-medium text-foreground">
-                  {formatDate(subscription?.current_period_end ?? null)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Manage your subscription in the Danger Zone below
-                </p>
-              </>
-            )}
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Renew your subscription to keep unlimited vehicles
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleUpgrade('monthly')}
+                disabled={loading !== null}
+                className="border border-border px-4 py-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {loading === 'monthly' ? (
+                  'Loading...'
+                ) : (
+                  <>
+                    <span className="block text-lg font-semibold text-foreground">$5/mo</span>
+                    <span className="text-muted-foreground">Monthly</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleUpgrade('annual')}
+                disabled={loading !== null}
+                className="bg-primary text-primary-foreground px-4 py-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 relative"
+              >
+                {loading === 'annual' ? (
+                  'Loading...'
+                ) : (
+                  <>
+                    <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                      Save 33%
+                    </span>
+                    <span className="block text-lg font-semibold">$40/yr</span>
+                    <span className="text-primary-foreground/70">Annual</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="border-t border-border pt-4 mt-4">
