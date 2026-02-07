@@ -29,6 +29,20 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // Handle auth code exchange (email confirmation, password reset, etc.)
+  // Supabase redirects back with a ?code= param that must be exchanged for a session
+  const code = request.nextUrl.searchParams.get('code');
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) {
+      const url = request.nextUrl.clone();
+      url.searchParams.delete('code');
+      url.pathname = request.nextUrl.searchParams.get('next') ?? '/dashboard';
+      url.searchParams.delete('next');
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Refresh session if expired - required for Server Components
   const {
     data: { user },
@@ -37,7 +51,8 @@ export async function updateSession(request: NextRequest) {
   // Public routes that don't require authentication
   const isPublicRoute = request.nextUrl.pathname === '/' ||
                         request.nextUrl.pathname.startsWith('/login') ||
-                        request.nextUrl.pathname.startsWith('/signup');
+                        request.nextUrl.pathname.startsWith('/signup') ||
+                        request.nextUrl.pathname.startsWith('/auth/confirm');
 
   // Auth routes (login/signup pages)
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') ||
