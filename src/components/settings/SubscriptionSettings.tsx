@@ -77,12 +77,32 @@ export default function SubscriptionSettings({
       )}
 
       {subscription?.cancel_at_period_end && subscription.status === 'active' && (
-        <div className="bg-orange-500/10 p-4 border border-orange-500/30">
-          <p className="text-sm text-orange-500">
-            Your subscription will be canceled on{' '}
-            {formatDate(subscription.current_period_end)}. You&apos;ll keep Pro
-            features until then.
-          </p>
+        <div className="bg-orange-500/10 p-4 border border-orange-500/30 space-y-3">
+          <div>
+            <p className="font-semibold text-orange-500">
+              Your subscription has been cancelled
+            </p>
+            <p className="text-sm text-orange-500 mt-1">
+              {(() => {
+                if (!subscription.current_period_end) return 'Your access will end soon.';
+                const endDate = new Date(subscription.current_period_end);
+                const now = new Date();
+                const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 0) return 'Your access has ended.';
+                if (daysLeft === 1) return 'There is 1 day left in your subscription.';
+                return `There are ${daysLeft} days left in your subscription.`;
+              })()}
+            </p>
+          </div>
+          <div className="bg-orange-500/10 p-3 border border-orange-500/20">
+            <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+              Important: Export your data before your subscription ends
+            </p>
+            <p className="text-sm text-orange-500 mt-1">
+              When your subscription expires, vehicles beyond the free limit will be deleted.
+              Go to your collection and use the CSV export to save a backup of all your vehicles.
+            </p>
+          </div>
         </div>
       )}
 
@@ -107,13 +127,24 @@ export default function SubscriptionSettings({
 
         {isProUser ? (
           <div className="border-t border-border pt-4 mt-4">
-            <p className="text-sm text-muted-foreground mb-1">Next billing date</p>
-            <p className="font-medium text-foreground">
-              {formatDate(subscription?.current_period_end ?? null)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Manage your subscription in the Danger Zone below
-            </p>
+            {subscription?.cancel_at_period_end ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-1">Access ends</p>
+                <p className="font-medium text-orange-500">
+                  {formatDate(subscription?.current_period_end ?? null)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-1">Next billing date</p>
+                <p className="font-medium text-foreground">
+                  {formatDate(subscription?.current_period_end ?? null)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Manage your subscription in the Danger Zone below
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="border-t border-border pt-4 mt-4">
