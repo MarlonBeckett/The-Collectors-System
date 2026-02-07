@@ -86,18 +86,18 @@ export function VehicleList({ vehicles }: VehicleListProps) {
         case 'expiration-asc': {
           const daysA = daysUntilExpiration(a.tab_expiration);
           const daysB = daysUntilExpiration(b.tab_expiration);
-          if (daysA === null && daysB === null) return 0;
+          if (daysA === null && daysB === null) return a.name.localeCompare(b.name);
           if (daysA === null) return 1;
           if (daysB === null) return -1;
-          return daysA - daysB;
+          return daysA - daysB || a.name.localeCompare(b.name);
         }
         case 'expiration-desc': {
           const daysA = daysUntilExpiration(a.tab_expiration);
           const daysB = daysUntilExpiration(b.tab_expiration);
-          if (daysA === null && daysB === null) return 0;
+          if (daysA === null && daysB === null) return a.name.localeCompare(b.name);
           if (daysA === null) return 1;
           if (daysB === null) return -1;
-          return daysB - daysA;
+          return daysB - daysA || a.name.localeCompare(b.name);
         }
         case 'name-asc':
           return a.name.localeCompare(b.name);
@@ -116,9 +116,9 @@ export function VehicleList({ vehicles }: VehicleListProps) {
           return a.year - b.year || a.name.localeCompare(b.name);
         }
         case 'added-desc':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || a.name.localeCompare(b.name);
         case 'added-asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.name.localeCompare(b.name);
         default:
           return 0;
       }
