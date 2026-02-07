@@ -34,7 +34,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protected routes - redirect to login if not authenticated
+  // Public routes that don't require authentication
+  const isPublicRoute = request.nextUrl.pathname === '/' ||
+                        request.nextUrl.pathname.startsWith('/login') ||
+                        request.nextUrl.pathname.startsWith('/signup');
+
+  // Auth routes (login/signup pages)
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') ||
                       request.nextUrl.pathname.startsWith('/signup') ||
                       request.nextUrl.pathname.startsWith('/api/auth');
@@ -42,16 +47,16 @@ export async function updateSession(request: NextRequest) {
   // API routes handle their own auth - don't redirect them
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
 
-  if (!user && !isAuthRoute && !isApiRoute) {
+  if (!user && !isPublicRoute && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isAuthRoute && !request.nextUrl.pathname.startsWith('/api/auth')) {
+  // Redirect authenticated users away from landing page and auth pages
+  if (user && (request.nextUrl.pathname === '/' || isAuthRoute) && !request.nextUrl.pathname.startsWith('/api/auth')) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
 

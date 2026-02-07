@@ -21,7 +21,7 @@ export function SignupForm() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -33,6 +33,12 @@ export function SignupForm() {
 
       if (error) {
         setError(error.message);
+        return;
+      }
+
+      // Check if email already exists (Supabase returns user with empty identities)
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        setError("Couldn't create account, that email is already in use.");
         return;
       }
 

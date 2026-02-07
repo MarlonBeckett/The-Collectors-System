@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { createClient } from '@/lib/supabase/client';
 import type { Subscription } from '@/lib/subscription';
 import { isPro } from '@/lib/subscription';
 
@@ -12,12 +13,27 @@ interface DangerZoneProps {
 
 export default function DangerZone({ subscription }: DangerZoneProps) {
   const router = useRouter();
+  const supabase = createClient();
+  const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const isProUser = isPro(subscription);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      router.push('/login');
+      router.refresh();
+    } catch (err) {
+      console.error('Sign out error:', err);
+      setSigningOut(false);
+    }
+  };
 
   const handleManageSubscription = async () => {
     setPortalLoading(true);
@@ -62,45 +78,74 @@ export default function DangerZone({ subscription }: DangerZoneProps) {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold mb-4 text-red-500">Danger Zone</h2>
-      <div className="bg-red-500/5 border border-red-500/20 p-4 space-y-4">
-        {/* Manage/Cancel Subscription */}
-        {isProUser && (
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between text-lg font-semibold text-red-500 mb-4 hover:opacity-80 transition-opacity"
+      >
+        <span>Danger Zone</span>
+        {isExpanded ? (
+          <ChevronUpIcon className="w-5 h-5" />
+        ) : (
+          <ChevronDownIcon className="w-5 h-5" />
+        )}
+      </button>
+
+      {isExpanded && (
+        <div className="bg-red-500/5 border border-red-500/20 p-4 space-y-4">
+          {/* Sign Out */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-red-500/20">
             <div>
-              <p className="font-medium text-foreground">Cancel Subscription</p>
+              <p className="font-medium text-foreground">Sign Out</p>
               <p className="text-sm text-muted-foreground">
-                Manage or cancel your Pro subscription
+                Sign out of your account on this device
               </p>
             </div>
             <button
-              onClick={handleManageSubscription}
-              disabled={portalLoading}
+              onClick={handleSignOut}
+              disabled={signingOut}
               className="px-4 py-2 border border-red-500/50 text-red-500 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50"
             >
-              {portalLoading ? 'Loading...' : 'Manage Subscription'}
+              {signingOut ? 'Signing out...' : 'Sign Out'}
             </button>
           </div>
-        )}
 
-        {/* Delete Account */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p className="font-medium text-foreground">Delete Account</p>
-            <p className="text-sm text-muted-foreground">
-              Permanently delete your account and all data
-            </p>
+          {/* Manage/Cancel Subscription */}
+          {isProUser && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-red-500/20">
+              <div>
+                <p className="font-medium text-foreground">Cancel Subscription</p>
+                <p className="text-sm text-muted-foreground">
+                  Manage or cancel your Pro subscription
+                </p>
+              </div>
+              <button
+                onClick={handleManageSubscription}
+                disabled={portalLoading}
+                className="px-4 py-2 border border-red-500/50 text-red-500 text-sm font-medium hover:bg-red-500/10 disabled:opacity-50"
+              >
+                {portalLoading ? 'Loading...' : 'Manage Subscription'}
+              </button>
+            </div>
+          )}
+
+          {/* Delete Account */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="font-medium text-foreground">Delete Account</p>
+              <p className="text-sm text-muted-foreground">
+                Permanently delete your account and all data
+              </p>
+            </div>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600"
+            >
+              Delete Account
+            </button>
           </div>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="px-4 py-2 bg-red-500 text-white text-sm font-medium hover:bg-red-600"
-          >
-            Delete Account
-          </button>
-        </div>
 
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card border border-border p-6 max-w-md w-full">
               <div className="flex items-center gap-3 mb-4">
@@ -154,8 +199,9 @@ export default function DangerZone({ subscription }: DangerZoneProps) {
               </div>
             </div>
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
