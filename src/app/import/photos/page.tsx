@@ -22,7 +22,7 @@ export default async function BulkPhotoImportPage() {
   );
 
   if (editableCollections.length === 0) {
-    redirect('/');
+    redirect('/dashboard');
   }
 
   // Format collections for the component
@@ -37,7 +37,7 @@ export default async function BulkPhotoImportPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center gap-4 mb-6">
           <Link
-            href="/"
+            href="/dashboard"
             className="p-2 hover:bg-muted transition-colors"
           >
             <ArrowLeftIcon className="w-5 h-5" />

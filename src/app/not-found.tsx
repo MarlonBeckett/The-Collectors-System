@@ -13,7 +13,7 @@ export default function NotFound() {
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
         <Link
-          href="/"
+          href="/dashboard"
           className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-semibold hover:opacity-90"
         >
           <ArrowLeftIcon className="w-5 h-5" />

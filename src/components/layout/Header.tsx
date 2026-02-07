@@ -40,7 +40,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 bg-card border-b border-border">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="font-bold text-xl text-foreground">
+        <Link href="/dashboard" className="font-bold text-xl text-foreground">
           <span className="sm:hidden">TCS</span>
           <span className="hidden sm:inline">The Collectors System</span>
         </Link>

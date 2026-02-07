@@ -154,7 +154,7 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
         .eq('id', vehicle.id);
 
       if (error) throw error;
-      router.push('/');
+      router.push('/dashboard');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');

@@ -578,7 +578,7 @@ export function BulkPhotoImport({ collections }: BulkPhotoImportProps) {
           {step === 'done' && (
             <div className="flex gap-3">
               <a
-                href="/"
+                href="/dashboard"
                 className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold text-center hover:opacity-90"
               >
                 View Collection
