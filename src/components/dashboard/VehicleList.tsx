@@ -104,16 +104,16 @@ export function VehicleList({ vehicles }: VehicleListProps) {
         case 'name-desc':
           return b.name.localeCompare(a.name);
         case 'year-desc': {
-          if (a.year === null && b.year === null) return 0;
+          if (a.year === null && b.year === null) return a.name.localeCompare(b.name);
           if (a.year === null) return 1;
           if (b.year === null) return -1;
-          return b.year - a.year;
+          return b.year - a.year || a.name.localeCompare(b.name);
         }
         case 'year-asc': {
-          if (a.year === null && b.year === null) return 0;
+          if (a.year === null && b.year === null) return a.name.localeCompare(b.name);
           if (a.year === null) return 1;
           if (b.year === null) return -1;
-          return a.year - b.year;
+          return a.year - b.year || a.name.localeCompare(b.name);
         }
         case 'added-desc':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
