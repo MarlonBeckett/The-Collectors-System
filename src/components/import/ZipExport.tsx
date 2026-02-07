@@ -368,7 +368,7 @@ export function ZipExport({ collections }: ZipExportProps) {
               <p className="text-sm text-muted-foreground">
                 {result.totalFiles} file{result.totalFiles !== 1 ? 's' : ''} exported
                 {result.skippedFiles > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400">
+                  <span className="text-red-600 dark:text-red-400">
                     {' '}&middot; {result.skippedFiles} skipped
                   </span>
                 )}
