@@ -43,9 +43,12 @@ function downloadBlob(blob: Blob, filename: string): void {
 async function fetchFileFromStorage(
   supabase: SupabaseClient,
   bucket: string,
-  storagePath: string
+  storagePath: string,
+  signal?: AbortSignal
 ): Promise<Blob | null> {
   try {
+    if (signal?.aborted) return null;
+
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(bucket)
       .createSignedUrl(storagePath, 3600);
@@ -54,7 +57,9 @@ async function fetchFileFromStorage(
       return null;
     }
 
-    const response = await fetch(signedUrlData.signedUrl);
+    if (signal?.aborted) return null;
+
+    const response = await fetch(signedUrlData.signedUrl, { signal });
     if (!response.ok) return null;
 
     return await response.blob();
@@ -181,7 +186,8 @@ async function addVehicleToZip(
   basePath: string,
   supabase: SupabaseClient,
   onProgress: (progress: ExportProgress) => void,
-  fileCounter: { downloaded: number; skipped: number; skippedDetails: string[] }
+  fileCounter: { downloaded: number; skipped: number; skippedDetails: string[] },
+  signal?: AbortSignal
 ): Promise<void> {
   // Fetch all related data for this vehicle
   const [photosRes, documentsRes, serviceRecordsRes, receiptsRes, mileageRes, valueRes] =
@@ -259,14 +265,16 @@ async function addVehicleToZip(
   // Download and add photos
   const photoNames = new Set<string>();
   for (const photo of photos) {
+    if (signal?.aborted) return;
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
-      total: 0, // Total is updated by caller
+      total: 0,
       message: `${vehicle.name}: downloading photo...`,
     });
 
-    const blob = await fetchFileFromStorage(supabase, 'motorcycle-photos', photo.storage_path);
+    const blob = await fetchFileFromStorage(supabase, 'motorcycle-photos', photo.storage_path, signal);
+    if (signal?.aborted) return;
     if (blob) {
       const ext = photo.storage_path.split('.').pop() || 'jpg';
       const baseName = photo.caption
@@ -284,6 +292,7 @@ async function addVehicleToZip(
   // Download and add documents
   const docNames = new Set<string>();
   for (const doc of documents) {
+    if (signal?.aborted) return;
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
@@ -291,7 +300,8 @@ async function addVehicleToZip(
       message: `${vehicle.name}: downloading document "${doc.title}"...`,
     });
 
-    const blob = await fetchFileFromStorage(supabase, 'vehicle-documents', doc.storage_path);
+    const blob = await fetchFileFromStorage(supabase, 'vehicle-documents', doc.storage_path, signal);
+    if (signal?.aborted) return;
     if (blob) {
       const fileName = getUniqueFileName(docNames, doc.file_name || doc.storage_path.split('/').pop() || 'document');
       zip.file(`${basePath}/documents/${fileName}`, blob);
@@ -306,6 +316,7 @@ async function addVehicleToZip(
   const receiptNames = new Set<string>();
   for (const sr of serviceRecordsWithReceipts) {
     for (const receipt of sr.receipts) {
+      if (signal?.aborted) return;
       onProgress({
         phase: 'Downloading files',
         current: fileCounter.downloaded + fileCounter.skipped,
@@ -313,7 +324,8 @@ async function addVehicleToZip(
         message: `${vehicle.name}: downloading receipt for "${sr.title}"...`,
       });
 
-      const blob = await fetchFileFromStorage(supabase, 'service-receipts', receipt.storage_path);
+      const blob = await fetchFileFromStorage(supabase, 'service-receipts', receipt.storage_path, signal);
+      if (signal?.aborted) return;
       if (blob) {
         const receiptFileName = receipt.file_name || receipt.storage_path.split('/').pop() || 'receipt';
         const fileName = getUniqueFileName(receiptNames, receiptFileName);
@@ -330,7 +342,8 @@ async function addVehicleToZip(
 export async function exportVehicleZip(
   vehicleId: string,
   supabase: SupabaseClient,
-  onProgress: (progress: ExportProgress) => void
+  onProgress: (progress: ExportProgress) => void,
+  signal?: AbortSignal
 ): Promise<ExportResult> {
   onProgress({ phase: 'Preparing', current: 0, total: 1, message: 'Fetching vehicle data...' });
 
@@ -340,7 +353,7 @@ export async function exportVehicleZip(
     .eq('id', vehicleId)
     .single();
 
-  if (error || !vehicle) {
+  if (error || !vehicle || signal?.aborted) {
     return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: [] };
   }
 
@@ -351,7 +364,11 @@ export async function exportVehicleZip(
 
   const fileCounter = { downloaded: 0, skipped: 0, skippedDetails: [] as string[] };
 
-  await addVehicleToZip(zip, v, folderName, supabase, onProgress, fileCounter);
+  await addVehicleToZip(zip, v, folderName, supabase, onProgress, fileCounter, signal);
+
+  if (signal?.aborted) {
+    return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
+  }
 
   onProgress({
     phase: 'Generating ZIP',
@@ -364,6 +381,10 @@ export async function exportVehicleZip(
     type: 'blob',
     streamFiles: true,
   });
+
+  if (signal?.aborted) {
+    return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
+  }
 
   downloadBlob(blob, `${folderName}.zip`);
 
@@ -380,7 +401,8 @@ export async function exportCollectionZip(
   collectionName: string,
   supabase: SupabaseClient,
   csvOptions: ExportOptions,
-  onProgress: (progress: ExportProgress) => void
+  onProgress: (progress: ExportProgress) => void,
+  signal?: AbortSignal
 ): Promise<ExportResult> {
   onProgress({ phase: 'Preparing', current: 0, total: 1, message: 'Fetching collection data...' });
 
@@ -390,12 +412,12 @@ export async function exportCollectionZip(
     .eq('collection_id', collectionId)
     .order('name');
 
-  if (error || !vehicles || vehicles.length === 0) {
+  if (error || !vehicles || vehicles.length === 0 || signal?.aborted) {
     return {
       success: false,
       totalFiles: 0,
       skippedFiles: 0,
-      skippedDetails: vehicles?.length === 0 ? ['No vehicles in collection'] : [],
+      skippedDetails: signal?.aborted ? ['Export cancelled'] : vehicles?.length === 0 ? ['No vehicles in collection'] : [],
     };
   }
 
@@ -413,6 +435,10 @@ export async function exportCollectionZip(
   const vehicleFolderNames = new Set<string>();
 
   for (let i = 0; i < typedVehicles.length; i++) {
+    if (signal?.aborted) {
+      return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
+    }
+
     const vehicle = typedVehicles[i];
     onProgress({
       phase: 'Processing vehicles',
@@ -428,8 +454,13 @@ export async function exportCollectionZip(
       `${rootFolder}/${vehicleFolder}`,
       supabase,
       onProgress,
-      fileCounter
+      fileCounter,
+      signal
     );
+  }
+
+  if (signal?.aborted) {
+    return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
   }
 
   onProgress({
@@ -443,6 +474,10 @@ export async function exportCollectionZip(
     type: 'blob',
     streamFiles: true,
   });
+
+  if (signal?.aborted) {
+    return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
+  }
 
   downloadBlob(blob, `${rootFolder}.zip`);
 

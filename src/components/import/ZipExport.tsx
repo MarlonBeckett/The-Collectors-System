@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
 import {
@@ -55,6 +55,15 @@ export function ZipExport({ collections }: ZipExportProps) {
     defaultCollection?.id || ''
   );
 
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any running export on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -99,6 +108,10 @@ export function ZipExport({ collections }: ZipExportProps) {
     const collection = collections.find((c) => c.id === selectedCollectionId);
     if (!collection) return;
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setExporting(true);
     setResult(null);
     setProgress({ phase: 'Starting', current: 0, total: 1, message: 'Starting export...' });
@@ -109,38 +122,59 @@ export function ZipExport({ collections }: ZipExportProps) {
         collection.name,
         supabase,
         csvOptions,
-        handleProgress
+        handleProgress,
+        controller.signal
       );
-      setResult(res);
+      if (!controller.signal.aborted) {
+        setResult(res);
+      }
     } catch (err) {
-      console.error('Export error:', err);
-      setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export failed unexpectedly'] });
+      if (!controller.signal.aborted) {
+        console.error('Export error:', err);
+        setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export failed unexpectedly'] });
+      }
     } finally {
-      setExporting(false);
-      setProgress(null);
+      if (!controller.signal.aborted) {
+        setExporting(false);
+        setProgress(null);
+      }
     }
   };
 
   const handleVehicleExport = async () => {
     if (!selectedVehicleId) return;
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setExporting(true);
     setResult(null);
     setProgress({ phase: 'Starting', current: 0, total: 1, message: 'Starting export...' });
 
     try {
-      const res = await exportVehicleZip(selectedVehicleId, supabase, handleProgress);
-      setResult(res);
+      const res = await exportVehicleZip(selectedVehicleId, supabase, handleProgress, controller.signal);
+      if (!controller.signal.aborted) {
+        setResult(res);
+      }
     } catch (err) {
-      console.error('Export error:', err);
-      setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export failed unexpectedly'] });
+      if (!controller.signal.aborted) {
+        console.error('Export error:', err);
+        setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export failed unexpectedly'] });
+      }
     } finally {
-      setExporting(false);
-      setProgress(null);
+      if (!controller.signal.aborted) {
+        setExporting(false);
+        setProgress(null);
+      }
     }
   };
 
   const handleCsvExport = async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setExporting(true);
     setResult(null);
     try {
@@ -201,17 +235,25 @@ export function ZipExport({ collections }: ZipExportProps) {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        setResult({ success: true, totalFiles: fileCount, skippedFiles: 0, skippedDetails: [] });
+        if (!controller.signal.aborted) {
+          setResult({ success: true, totalFiles: fileCount, skippedFiles: 0, skippedDetails: [] });
+        }
       } else {
         // No related data, just download plain CSV
         downloadCSV(vehiclesCsv, `${collectionName}-export-${date}.csv`);
-        setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
+        if (!controller.signal.aborted) {
+          setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
+        }
       }
     } catch (err) {
-      console.error('CSV export error:', err);
-      setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['CSV export failed'] });
+      if (!controller.signal.aborted) {
+        console.error('CSV export error:', err);
+        setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['CSV export failed'] });
+      }
     } finally {
-      setExporting(false);
+      if (!controller.signal.aborted) {
+        setExporting(false);
+      }
     }
   };
 
