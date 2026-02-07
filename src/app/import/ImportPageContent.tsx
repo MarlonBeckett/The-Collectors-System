@@ -3,12 +3,12 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CSVImport } from '@/components/import/CSVImport';
-import { CSVExport } from '@/components/import/CSVExport';
+import { ZipExport } from '@/components/import/ZipExport';
 import { BulkPhotoImport } from '@/components/import/BulkPhotoImport';
 import Link from 'next/link';
 import { ArrowLeftIcon, SparklesIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
 
-type Tab = 'import' | 'export' | 'photos';
+type Tab = 'import' | 'export';
 
 interface UserCollection {
   id: string;
@@ -159,14 +159,12 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState<Tab>(
-    tabParam === 'export' ? 'export' : tabParam === 'photos' ? 'photos' : 'import'
+    tabParam === 'export' ? 'export' : 'import'
   );
 
   useEffect(() => {
     if (tabParam === 'export') {
       setActiveTab('export');
-    } else if (tabParam === 'photos') {
-      setActiveTab('photos');
     }
   }, [tabParam]);
 
@@ -174,21 +172,17 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-center gap-4 mb-6">
         <Link
-          href="/dashboard"
+          href="/settings"
           className="p-2 hover:bg-muted transition-colors"
         >
           <ArrowLeftIcon className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {activeTab === 'import' ? 'Import Data' : activeTab === 'photos' ? 'Import Photos' : 'Export Data'}
-          </h1>
+          <h1 className="text-2xl font-bold text-foreground">Data Management</h1>
           <p className="text-muted-foreground">
             {activeTab === 'import'
-              ? 'Import vehicles from a CSV file'
-              : activeTab === 'photos'
-              ? 'Bulk import photos from folders'
-              : 'Export your collection to CSV'}
+              ? 'Import vehicles and photos'
+              : 'Export your collection data'}
           </p>
         </div>
       </div>
@@ -203,17 +197,7 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Vehicles
-        </button>
-        <button
-          onClick={() => setActiveTab('photos')}
-          className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-            activeTab === 'photos'
-              ? 'text-primary border-b-2 border-primary'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Photos
+          Import
         </button>
         <button
           onClick={() => setActiveTab('export')}
@@ -244,28 +228,18 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
             </div>
 
             <CSVImport collections={collections} subscriptionInfo={subscriptionInfo} />
-          </>
-        )}
 
-        {activeTab === 'photos' && (
-          <>
-            <AIPromptHelper />
-
-            <div className="bg-card border border-border p-4">
-              <h2 className="font-semibold mb-2">Photo Import Tips</h2>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>Organize photos in folders named after each vehicle</li>
-                <li>Folder names will be auto-matched to your vehicles</li>
-                <li>Supported formats: JPG, PNG, WebP, HEIC</li>
-                <li>Max 10MB per photo</li>
-              </ul>
+            <div className="border-t border-border pt-6">
+              <h2 className="font-semibold mb-2">Bulk Photo Import</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Organize photos in folders named after each vehicle, then upload them all at once.
+              </p>
+              <BulkPhotoImport collections={collections} />
             </div>
-
-            <BulkPhotoImport collections={collections} />
           </>
         )}
 
-        {activeTab === 'export' && <CSVExport collections={collections} />}
+        {activeTab === 'export' && <ZipExport collections={collections} />}
       </div>
     </div>
   );

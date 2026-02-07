@@ -10,7 +10,7 @@ import { CollectionSettings } from '@/components/settings/CollectionSettings';
 import { JoinCollection } from '@/components/settings/JoinCollection';
 import DangerZone from '@/components/settings/DangerZone';
 import { createClient } from '@/lib/supabase/client';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PencilIcon, PhotoIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { CircleStackIcon, PlusIcon, PencilIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
 import type { Subscription } from '@/lib/subscription';
 import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
@@ -534,6 +534,23 @@ export function SettingsContent({
         </div>
       </section>
 
+      {/* Data Management */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Data Management</h2>
+        <div className="bg-card border border-border">
+          <Link
+            href="/import"
+            className="flex items-center gap-3 p-4 hover:bg-muted transition-colors"
+          >
+            <CircleStackIcon className="w-5 h-5 text-muted-foreground shrink-0" />
+            <div>
+              <div className="font-medium">Data Management</div>
+              <div className="text-sm text-muted-foreground">Import and export your vehicle data</div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* My Collections Section */}
       <section>
         <div className="flex items-center justify-between mb-4">
@@ -636,43 +653,6 @@ export function SettingsContent({
       <section>
         <h2 className="text-lg font-semibold mb-4">Join a Collection</h2>
         <JoinCollection />
-      </section>
-
-      {/* Data Management */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Data Management</h2>
-        <div className="bg-card border border-border divide-y divide-border">
-          <Link
-            href="/import?tab=export"
-            className="flex items-center gap-3 p-4 hover:bg-muted transition-colors"
-          >
-            <ArrowDownTrayIcon className="w-5 h-5 text-muted-foreground shrink-0" />
-            <div>
-              <div className="font-medium">Export to CSV</div>
-              <div className="text-sm text-muted-foreground">Download your collection as a CSV file</div>
-            </div>
-          </Link>
-          <Link
-            href="/import"
-            className="flex items-center gap-3 p-4 hover:bg-muted transition-colors"
-          >
-            <ArrowUpTrayIcon className="w-5 h-5 text-muted-foreground shrink-0" />
-            <div>
-              <div className="font-medium">Import Vehicles from CSV</div>
-              <div className="text-sm text-muted-foreground">Add vehicles from a CSV file</div>
-            </div>
-          </Link>
-          <Link
-            href="/import?tab=photos"
-            className="flex items-center gap-3 p-4 hover:bg-muted transition-colors"
-          >
-            <PhotoIcon className="w-5 h-5 text-muted-foreground shrink-0" />
-            <div>
-              <div className="font-medium">Import Photos from Folder</div>
-              <div className="text-sm text-muted-foreground">Bulk upload photos organized by vehicle</div>
-            </div>
-          </Link>
-        </div>
       </section>
 
       {/* Sign Out */}
