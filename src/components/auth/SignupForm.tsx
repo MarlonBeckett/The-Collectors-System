@@ -36,7 +36,11 @@ export function SignupForm() {
       });
 
       if (error) {
-        setError(error.message);
+        if (error.message.toLowerCase().includes('database error saving new user')) {
+          setError('That username is already taken. Please choose a different one.');
+        } else {
+          setError(error.message);
+        }
         return;
       }
 
