@@ -8,7 +8,9 @@ import Link from 'next/link';
 export function SignupForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -26,7 +28,9 @@ export function SignupForm() {
         password,
         options: {
           data: {
-            display_name: displayName,
+            username,
+            first_name: firstName,
+            last_name: lastName,
           },
         },
       });
@@ -74,18 +78,47 @@ export function SignupForm() {
         </div>
       )}
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="firstName" className="block text-sm font-medium mb-2">
+            First Name
+          </label>
+          <input
+            id="firstName"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+            placeholder="First"
+          />
+        </div>
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium mb-2">
+            Last Name
+          </label>
+          <input
+            id="lastName"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+            placeholder="Last"
+          />
+        </div>
+      </div>
+
       <div>
-        <label htmlFor="displayName" className="block text-sm font-medium mb-2">
-          Display Name
+        <label htmlFor="username" className="block text-sm font-medium mb-2">
+          Username
         </label>
         <input
-          id="displayName"
+          id="username"
           type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           required
           className="w-full px-4 py-3 text-base bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="Your name"
+          placeholder="Choose a username"
         />
       </div>
 

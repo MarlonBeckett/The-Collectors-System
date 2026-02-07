@@ -8,7 +8,7 @@ interface Member {
   user_id: string;
   role: string;
   email: string | null;
-  display_name: string | null;
+  username: string | null;
   isCurrentUser: boolean;
 }
 
@@ -53,7 +53,7 @@ export function MembersModal({
       const userIds = membersData.map((m) => m.user_id);
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, email, display_name')
+        .select('id, email, username')
         .in('id', userIds);
 
       // Create a map of user_id to profile
@@ -69,7 +69,7 @@ export function MembersModal({
             user_id: m.user_id,
             role: m.role,
             email: profile?.email || null,
-            display_name: profile?.display_name || null,
+            username: profile?.username || null,
             isCurrentUser: m.user_id === currentUserId,
           };
         })
@@ -148,7 +148,7 @@ export function MembersModal({
                     <div className="font-medium truncate">
                       {member.isCurrentUser
                         ? 'You'
-                        : member.display_name || member.email?.split('@')[0] || 'Unknown'}
+                        : member.username || member.email?.split('@')[0] || 'Unknown'}
                     </div>
                     {member.email && !member.isCurrentUser && (
                       <div className="text-sm text-muted-foreground truncate">

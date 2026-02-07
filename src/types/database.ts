@@ -104,7 +104,11 @@ export interface NotificationLog {
 
 export interface Profile {
   id: string;
-  display_name: string | null;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  phone_number: string | null;
+  avatar_url: string | null;
   email: string | null;
   receive_notifications: boolean;
   created_at: string;
@@ -196,6 +200,18 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>;
 }
 
+export type SupportMessageStatus = 'new' | 'in_progress' | 'resolved';
+
+export interface SupportMessage {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  user_id: string | null;
+  status: SupportMessageStatus;
+  created_at: string;
+}
+
 export interface MotorcycleWithPhotos extends Motorcycle {
   photos: Photo[];
 }
@@ -269,6 +285,11 @@ export interface Database {
         Row: Subscription;
         Insert: Omit<Subscription, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<Subscription, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      support_messages: {
+        Row: SupportMessage;
+        Insert: Omit<SupportMessage, 'id' | 'created_at' | 'status'> & { id?: string; status?: SupportMessageStatus };
+        Update: Partial<Omit<SupportMessage, 'id' | 'created_at'>>;
       };
     };
     Enums: {

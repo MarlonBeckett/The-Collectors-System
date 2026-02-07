@@ -131,13 +131,21 @@ export async function POST() {
       .delete()
       .eq('user_id', user.id);
 
-    // 5. Delete profile
+    // 5. Delete avatar files from storage
+    const { data: avatarFiles } = await adminSupabase.storage
+      .from('avatars').list(user.id);
+    if (avatarFiles?.length) {
+      await adminSupabase.storage.from('avatars')
+        .remove(avatarFiles.map(f => `${user.id}/${f.name}`));
+    }
+
+    // 6. Delete profile
     await adminSupabase
       .from('profiles')
       .delete()
       .eq('id', user.id);
 
-    // 6. Delete the auth user (this also signs them out)
+    // 7. Delete the auth user (this also signs them out)
     const { error: deleteError } = await adminSupabase.auth.admin.deleteUser(user.id);
 
     if (deleteError) {
