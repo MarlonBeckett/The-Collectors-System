@@ -1,4 +1,4 @@
-import { Motorcycle } from '@/types/database';
+import { Motorcycle, VehicleDocument, ServiceRecord } from '@/types/database';
 import Papa from 'papaparse';
 
 export interface ExportOptions {
@@ -124,4 +124,62 @@ export function downloadCSV(csv: string, filename: string = 'vehicles-export.csv
 export function getExportFilename(): string {
   const date = new Date().toISOString().split('T')[0];
   return `vehicles-export-${date}.csv`;
+}
+
+export interface DocumentExportRow {
+  vehicle_name: string;
+  title: string;
+  document_type: string;
+  expiration_date: string;
+  notes: string;
+  file_name: string;
+}
+
+export interface ServiceRecordExportRow {
+  vehicle_name: string;
+  service_date: string;
+  title: string;
+  description: string;
+  cost: string;
+  odometer: string;
+  shop_name: string;
+  category: string;
+}
+
+export function generateDocumentsCSV(
+  documents: (VehicleDocument & { vehicle_name: string })[]
+): string {
+  const rows: DocumentExportRow[] = documents.map((d) => ({
+    vehicle_name: d.vehicle_name,
+    title: d.title || '',
+    document_type: d.document_type || '',
+    expiration_date: d.expiration_date || '',
+    notes: d.notes || '',
+    file_name: d.file_name || '',
+  }));
+
+  return Papa.unparse(rows, {
+    header: true,
+    columns: ['vehicle_name', 'title', 'document_type', 'expiration_date', 'notes', 'file_name'],
+  });
+}
+
+export function generateServiceRecordsCSV(
+  records: (ServiceRecord & { vehicle_name: string })[]
+): string {
+  const rows: ServiceRecordExportRow[] = records.map((r) => ({
+    vehicle_name: r.vehicle_name,
+    service_date: r.service_date || '',
+    title: r.title || '',
+    description: r.description || '',
+    cost: r.cost?.toString() || '',
+    odometer: r.odometer?.toString() || '',
+    shop_name: r.shop_name || '',
+    category: r.category || '',
+  }));
+
+  return Papa.unparse(rows, {
+    header: true,
+    columns: ['vehicle_name', 'service_date', 'title', 'description', 'cost', 'odometer', 'shop_name', 'category'],
+  });
 }

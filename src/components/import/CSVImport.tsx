@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { parseStatusFromNotes } from '@/lib/statusParser';
 import { DocumentArrowUpIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { DocumentType, ServiceCategory } from '@/types/database';
 
 interface UserCollection {
   id: string;
@@ -71,6 +72,26 @@ interface PreviewRow {
   error?: string;
 }
 
+interface DocumentRow {
+  vehicle_name: string;
+  title: string;
+  document_type: string;
+  expiration_date: string;
+  notes: string;
+  file_name: string;
+}
+
+interface ServiceRecordRow {
+  vehicle_name: string;
+  service_date: string;
+  title: string;
+  description: string;
+  cost: string;
+  odometer: string;
+  shop_name: string;
+  category: string;
+}
+
 const fieldLabels: Record<keyof ColumnMapping, string> = {
   name: 'Name (required)',
   make: 'Make',
@@ -89,15 +110,57 @@ const fieldLabels: Record<keyof ColumnMapping, string> = {
   maintenance_notes: 'Maintenance Notes',
 };
 
+function parseCSVText(text: string): CSVRow[] {
+  const lines = text.split('\n').filter(line => line.trim());
+  let csvText = text;
+
+  if (lines.length >= 2) {
+    const firstLineCommas = (lines[0].match(/,/g) || []).length;
+    const secondLineCommas = (lines[1].match(/,/g) || []).length;
+
+    if (firstLineCommas === 0 || (secondLineCommas > 0 && firstLineCommas < secondLineCommas / 2)) {
+      csvText = lines.slice(1).join('\n');
+    }
+  }
+
+  let result: CSVRow[] = [];
+  Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+      result = (results.data as CSVRow[]).filter((row) => {
+        const nonEmptyFields = Object.values(row).filter(v => {
+          if (v === null || v === undefined) return false;
+          return String(v).trim() !== '';
+        });
+        return nonEmptyFields.length >= 2;
+      });
+    },
+  });
+  return result;
+}
+
+const VALID_DOC_TYPES: DocumentType[] = ['title', 'registration', 'insurance', 'receipt', 'manual', 'other'];
+const VALID_SERVICE_CATEGORIES: ServiceCategory[] = ['maintenance', 'repair', 'upgrade', 'inspection'];
+
 export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    success: number;
+    failed: number;
+    documents: number;
+    serviceRecords: number;
+  } | null>(null);
   const [step, setStep] = useState<'upload' | 'map' | 'preview' | 'done'>('upload');
   const [limitError, setLimitError] = useState<string | null>(null);
+
+  // Additional CSV data from ZIP
+  const [documentRows, setDocumentRows] = useState<DocumentRow[]>([]);
+  const [serviceRecordRows, setServiceRecordRows] = useState<ServiceRecordRow[]>([]);
 
   // Default to first owned collection, or first collection if none owned
   const defaultCollection = collections.find(c => c.is_owner) || collections[0];
@@ -105,95 +168,177 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
 
   const supabase = createClient();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const processVehicleCSV = useCallback((text: string) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    let csvText = text;
+
+    if (lines.length >= 2) {
+      const firstLineCommas = (lines[0].match(/,/g) || []).length;
+      const secondLineCommas = (lines[1].match(/,/g) || []).length;
+
+      if (firstLineCommas === 0 || (secondLineCommas > 0 && firstLineCommas < secondLineCommas / 2)) {
+        csvText = lines.slice(1).join('\n');
+      }
+    }
+
+    Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        let data = results.data as CSVRow[];
+        const fields = results.meta.fields || [];
+
+        data = data.filter((row) => {
+          const nonEmptyFields = Object.values(row).filter(v => {
+            if (v === null || v === undefined) return false;
+            return String(v).trim() !== '';
+          });
+          return nonEmptyFields.length >= 2;
+        });
+
+        setCsvData(data);
+        setHeaders(fields);
+
+        const autoMapping: ColumnMapping = {};
+
+        const fieldPatterns: { field: keyof ColumnMapping; patterns: string[] }[] = [
+          { field: 'name', patterns: ['name', 'motorcycle', 'bike', 'vehicle', 'title'] },
+          { field: 'make', patterns: ['make', 'manufacturer', 'brand'] },
+          { field: 'model', patterns: ['model'] },
+          { field: 'year', patterns: ['year', 'yr', 'model year'] },
+          { field: 'nickname', patterns: ['nickname', 'alias'] },
+          { field: 'vehicle_type', patterns: ['vehicle_type', 'type', 'category'] },
+          { field: 'vin', patterns: ['vin', 'vehicle identification'] },
+          { field: 'plate_number', patterns: ['plate', 'license', 'tag', 'registration'] },
+          { field: 'mileage', patterns: ['mile', 'mileage', 'odometer', 'odo'] },
+          { field: 'tab_expiration', patterns: ['expir', 'tab', 'renewal', 'due'] },
+          { field: 'status', patterns: ['status'] },
+          { field: 'notes', patterns: ['note', 'comment', 'description', 'memo'] },
+          { field: 'purchase_price', patterns: ['purchase_price', 'price', 'cost', 'paid'] },
+          { field: 'purchase_date', patterns: ['purchase_date', 'bought', 'acquired'] },
+          { field: 'maintenance_notes', patterns: ['maintenance', 'service', 'repair'] },
+        ];
+
+        fields.forEach((field) => {
+          const normalized = field.toLowerCase().trim();
+
+          for (const { field: targetField, patterns } of fieldPatterns) {
+            if (autoMapping[targetField]) continue;
+
+            if (patterns.some(pattern => normalized.includes(pattern))) {
+              autoMapping[targetField] = field;
+              break;
+            }
+          }
+        });
+
+        setMapping(autoMapping);
+        setStep('map');
+      },
+      error: (error: Error) => {
+        console.error('CSV parse error:', error);
+      },
+    });
+  }, []);
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
+    // Reset additional data
+    setDocumentRows([]);
+    setServiceRecordRows([]);
+
+    // Handle ZIP files
+    if (file.name.endsWith('.zip') || file.type === 'application/zip') {
+      try {
+        const JSZip = (await import('jszip')).default;
+        const zip = await JSZip.loadAsync(file);
+
+        // Find CSV files in the ZIP (could be at root or in a subfolder)
+        let vehiclesText = '';
+        let documentsText = '';
+        let serviceRecordsText = '';
+
+        for (const [path, zipEntry] of Object.entries(zip.files)) {
+          if (zipEntry.dir) continue;
+          const fileName = path.split('/').pop()?.toLowerCase() || '';
+
+          if (fileName === 'vehicles.csv' || (fileName.endsWith('.csv') && !fileName.includes('document') && !fileName.includes('service'))) {
+            if (!vehiclesText) vehiclesText = await zipEntry.async('string');
+          } else if (fileName === 'documents.csv' || fileName.includes('document')) {
+            documentsText = await zipEntry.async('string');
+          } else if (fileName === 'service-records.csv' || fileName.includes('service')) {
+            serviceRecordsText = await zipEntry.async('string');
+          }
+        }
+
+        if (!vehiclesText) {
+          // Fallback: use the first CSV found
+          for (const [, zipEntry] of Object.entries(zip.files)) {
+            if (!zipEntry.dir && zipEntry.name.endsWith('.csv')) {
+              vehiclesText = await zipEntry.async('string');
+              break;
+            }
+          }
+        }
+
+        if (!vehiclesText) {
+          console.error('No CSV found in ZIP');
+          return;
+        }
+
+        // Parse additional CSVs
+        if (documentsText) {
+          const rows = parseCSVText(documentsText);
+          setDocumentRows(rows.map(r => ({
+            vehicle_name: r.vehicle_name?.trim() || '',
+            title: r.title?.trim() || '',
+            document_type: r.document_type?.trim() || '',
+            expiration_date: r.expiration_date?.trim() || '',
+            notes: r.notes?.trim() || '',
+            file_name: r.file_name?.trim() || '',
+          })).filter(r => r.vehicle_name && r.title));
+        }
+
+        if (serviceRecordsText) {
+          const rows = parseCSVText(serviceRecordsText);
+          setServiceRecordRows(rows.map(r => ({
+            vehicle_name: r.vehicle_name?.trim() || '',
+            service_date: r.service_date?.trim() || '',
+            title: r.title?.trim() || '',
+            description: r.description?.trim() || '',
+            cost: r.cost?.trim() || '',
+            odometer: r.odometer?.trim() || '',
+            shop_name: r.shop_name?.trim() || '',
+            category: r.category?.trim() || '',
+          })).filter(r => r.vehicle_name && r.title));
+        }
+
+        processVehicleCSV(vehiclesText);
+      } catch (err) {
+        console.error('ZIP parse error:', err);
+      }
+      return;
+    }
+
+    // Handle plain CSV files
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
       if (!text) return;
-
-      const lines = text.split('\n').filter(line => line.trim());
-      let csvText = text;
-
-      if (lines.length >= 2) {
-        const firstLineCommas = (lines[0].match(/,/g) || []).length;
-        const secondLineCommas = (lines[1].match(/,/g) || []).length;
-
-        if (firstLineCommas === 0 || (secondLineCommas > 0 && firstLineCommas < secondLineCommas / 2)) {
-          csvText = lines.slice(1).join('\n');
-        }
-      }
-
-      Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          let data = results.data as CSVRow[];
-          const fields = results.meta.fields || [];
-
-          data = data.filter((row) => {
-            const nonEmptyFields = Object.values(row).filter(v => {
-              if (v === null || v === undefined) return false;
-              const str = String(v).trim();
-              return str !== '';
-            });
-            return nonEmptyFields.length >= 2;
-          });
-
-          setCsvData(data);
-          setHeaders(fields);
-
-          const autoMapping: ColumnMapping = {};
-
-          const fieldPatterns: { field: keyof ColumnMapping; patterns: string[] }[] = [
-            { field: 'name', patterns: ['name', 'motorcycle', 'bike', 'vehicle', 'title'] },
-            { field: 'make', patterns: ['make', 'manufacturer', 'brand'] },
-            { field: 'model', patterns: ['model'] },
-            { field: 'year', patterns: ['year', 'yr', 'model year'] },
-            { field: 'nickname', patterns: ['nickname', 'alias'] },
-            { field: 'vehicle_type', patterns: ['vehicle_type', 'type', 'category'] },
-            { field: 'vin', patterns: ['vin', 'vehicle identification'] },
-            { field: 'plate_number', patterns: ['plate', 'license', 'tag', 'registration'] },
-            { field: 'mileage', patterns: ['mile', 'mileage', 'odometer', 'odo'] },
-            { field: 'tab_expiration', patterns: ['expir', 'tab', 'renewal', 'due'] },
-            { field: 'status', patterns: ['status'] },
-            { field: 'notes', patterns: ['note', 'comment', 'description', 'memo'] },
-            { field: 'purchase_price', patterns: ['purchase_price', 'price', 'cost', 'paid'] },
-            { field: 'purchase_date', patterns: ['purchase_date', 'bought', 'acquired'] },
-            { field: 'maintenance_notes', patterns: ['maintenance', 'service', 'repair'] },
-          ];
-
-          fields.forEach((field) => {
-            const normalized = field.toLowerCase().trim();
-
-            for (const { field: targetField, patterns } of fieldPatterns) {
-              if (autoMapping[targetField]) continue;
-
-              if (patterns.some(pattern => normalized.includes(pattern))) {
-                autoMapping[targetField] = field;
-                break;
-              }
-            }
-          });
-
-          setMapping(autoMapping);
-          setStep('map');
-        },
-        error: (error: Error) => {
-          console.error('CSV parse error:', error);
-        },
-      });
+      processVehicleCSV(text);
     };
     reader.readAsText(file);
-  }, []);
+  }, [processVehicleCSV]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'text/csv': ['.csv'],
       'application/vnd.ms-excel': ['.csv'],
+      'application/zip': ['.zip'],
+      'application/x-zip-compressed': ['.zip'],
     },
     maxFiles: 1,
   });
@@ -325,12 +470,17 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
     setImporting(true);
     let success = 0;
     let failed = 0;
+    let docsImported = 0;
+    let recordsImported = 0;
 
     const validRows = preview.filter((row) => row.valid);
 
+    // Map of vehicle name -> inserted vehicle id
+    const vehicleNameToId = new Map<string, string>();
+
     for (const row of validRows) {
       try {
-        const { error } = await supabase.from('motorcycles').insert({
+        const { data, error } = await supabase.from('motorcycles').insert({
           name: row.mapped.name,
           year: row.mapped.year,
           vin: row.mapped.vin,
@@ -348,13 +498,16 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
           sale_info: row.mapped.sale_info,
           maintenance_notes: row.mapped.maintenance_notes,
           collection_id: selectedCollectionId,
-        });
+        }).select('id, name').single();
 
         if (error) {
           console.error('Insert error:', error);
           failed++;
         } else {
           success++;
+          if (data) {
+            vehicleNameToId.set(data.name, data.id);
+          }
         }
       } catch (err) {
         console.error('Insert error:', err);
@@ -362,7 +515,73 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
       }
     }
 
-    setImportResult({ success, failed });
+    // Import documents if we have them
+    if (documentRows.length > 0 && vehicleNameToId.size > 0) {
+      for (const doc of documentRows) {
+        const vehicleId = vehicleNameToId.get(doc.vehicle_name);
+        if (!vehicleId) continue;
+
+        const docType = VALID_DOC_TYPES.includes(doc.document_type as DocumentType)
+          ? doc.document_type as DocumentType
+          : 'other';
+
+        const expDate = doc.expiration_date ? formatDateForDB(parseFlexibleDate(doc.expiration_date)) : null;
+
+        try {
+          const { error } = await supabase.from('vehicle_documents').insert({
+            motorcycle_id: vehicleId,
+            title: doc.title,
+            document_type: docType,
+            expiration_date: expDate,
+            notes: doc.notes || null,
+            file_name: doc.file_name || 'imported-document',
+            storage_path: '',
+          });
+
+          if (!error) docsImported++;
+        } catch {
+          // Skip failed document imports silently
+        }
+      }
+    }
+
+    // Import service records if we have them
+    if (serviceRecordRows.length > 0 && vehicleNameToId.size > 0) {
+      for (const record of serviceRecordRows) {
+        const vehicleId = vehicleNameToId.get(record.vehicle_name);
+        if (!vehicleId) continue;
+
+        const category = VALID_SERVICE_CATEGORIES.includes(record.category as ServiceCategory)
+          ? record.category as ServiceCategory
+          : 'maintenance';
+
+        const serviceDate = record.service_date
+          ? formatDateForDB(parseFlexibleDate(record.service_date)) || new Date().toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+
+        const cost = record.cost ? parseFloat(record.cost.replace(/[$,]/g, '')) : null;
+        const odometer = record.odometer ? parseInt(record.odometer.replace(/,/g, '')) : null;
+
+        try {
+          const { error } = await supabase.from('service_records').insert({
+            motorcycle_id: vehicleId,
+            service_date: serviceDate,
+            title: record.title,
+            description: record.description || null,
+            cost: cost && !isNaN(cost) ? cost : null,
+            odometer: odometer && !isNaN(odometer) ? odometer : null,
+            shop_name: record.shop_name || null,
+            category,
+          });
+
+          if (!error) recordsImported++;
+        } catch {
+          // Skip failed service record imports silently
+        }
+      }
+    }
+
+    setImportResult({ success, failed, documents: docsImported, serviceRecords: recordsImported });
     setImporting(false);
     setStep('done');
   };
@@ -373,6 +592,8 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
     setMapping({});
     setPreview([]);
     setImportResult(null);
+    setDocumentRows([]);
+    setServiceRecordRows([]);
     setStep('upload');
   };
 
@@ -411,10 +632,13 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
           <input {...getInputProps()} />
           <DocumentArrowUpIcon className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
           <p className="text-lg font-medium text-foreground">
-            {isDragActive ? 'Drop CSV file here...' : 'Drop your CSV file here'}
+            {isDragActive ? 'Drop file here...' : 'Drop your CSV or ZIP file here'}
           </p>
           <p className="text-muted-foreground mt-1">
             or tap to select a file
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            ZIP files can include documents.csv and service-records.csv
           </p>
         </div>
       )}
@@ -423,7 +647,17 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
       {step === 'map' && (
         <div className="space-y-6">
           <div className="bg-card border border-border p-4">
-            <h3 className="font-semibold mb-2">File loaded: {csvData.length} rows</h3>
+            <h3 className="font-semibold mb-2">File loaded: {csvData.length} vehicle rows</h3>
+            {(documentRows.length > 0 || serviceRecordRows.length > 0) && (
+              <div className="text-sm text-muted-foreground mb-2 space-y-0.5">
+                {documentRows.length > 0 && (
+                  <p>{documentRows.length} document{documentRows.length !== 1 ? 's' : ''} found</p>
+                )}
+                {serviceRecordRows.length > 0 && (
+                  <p>{serviceRecordRows.length} service record{serviceRecordRows.length !== 1 ? 's' : ''} found</p>
+                )}
+              </div>
+            )}
             <p className="text-sm text-muted-foreground mb-2">
               Map your CSV columns to vehicle fields
             </p>
@@ -482,8 +716,17 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
         <div className="space-y-6">
           <div className="bg-card border border-border p-4">
             <h3 className="font-semibold mb-2">
-              Ready to import {preview.filter((r) => r.valid).length} of {preview.length} rows
+              Ready to import {preview.filter((r) => r.valid).length} of {preview.length} vehicles
             </h3>
+            {(documentRows.length > 0 || serviceRecordRows.length > 0) && (
+              <p className="text-sm text-muted-foreground">
+                {[
+                  documentRows.length > 0 ? `${documentRows.length} document${documentRows.length !== 1 ? 's' : ''}` : '',
+                  serviceRecordRows.length > 0 ? `${serviceRecordRows.length} service record${serviceRecordRows.length !== 1 ? 's' : ''}` : '',
+                ].filter(Boolean).join(' and ')}{' '}
+                will also be imported
+              </p>
+            )}
             {preview.some((r) => !r.valid) && (
               <p className="text-sm text-destructive">
                 {preview.filter((r) => !r.valid).length} rows will be skipped (missing name)
@@ -574,14 +817,22 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
           }`}>
             <CheckCircleIcon className="w-12 h-12 mx-auto text-secondary mb-3" />
             <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
-            <p className="text-muted-foreground">
-              Successfully imported {importResult.success} vehicle{importResult.success !== 1 ? 's' : ''}
-              {importResult.failed > 0 && (
-                <span className="text-destructive">
-                  . {importResult.failed} failed.
-                </span>
+            <div className="text-muted-foreground space-y-1">
+              <p>
+                {importResult.success} vehicle{importResult.success !== 1 ? 's' : ''} imported
+                {importResult.failed > 0 && (
+                  <span className="text-destructive">
+                    , {importResult.failed} failed
+                  </span>
+                )}
+              </p>
+              {importResult.documents > 0 && (
+                <p>{importResult.documents} document{importResult.documents !== 1 ? 's' : ''} imported</p>
               )}
-            </p>
+              {importResult.serviceRecords > 0 && (
+                <p>{importResult.serviceRecords} service record{importResult.serviceRecords !== 1 ? 's' : ''} imported</p>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-3">

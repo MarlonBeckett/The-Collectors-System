@@ -217,13 +217,13 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
             <AIPromptHelper />
 
             <div className="bg-card border border-border p-4">
-              <h2 className="font-semibold mb-2">CSV Format Tips</h2>
+              <h2 className="font-semibold mb-2">Import Tips</h2>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>Include a header row with column names</li>
+                <li>Upload a CSV or a ZIP exported from this app</li>
+                <li>ZIP files can include documents.csv and service-records.csv</li>
                 <li>&ldquo;Name&rdquo; column is required</li>
                 <li>Dates can be: 6/25, 6/25/26, or 6/25/2026</li>
                 <li>Notes starting with SOLD or TRADED will set status</li>
-                <li>Example: &ldquo;SOLD 7/25 $10,000&rdquo; extracts sale info</li>
               </ul>
             </div>
 

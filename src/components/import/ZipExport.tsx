@@ -7,7 +7,10 @@ import {
   generateCSV,
   downloadCSV,
   ExportOptions,
+  generateDocumentsCSV,
+  generateServiceRecordsCSV,
 } from '@/lib/exportUtils';
+import { VehicleDocument, ServiceRecord } from '@/types/database';
 import {
   exportCollectionZip,
   exportVehicleZip,
@@ -137,16 +140,73 @@ export function ZipExport({ collections }: ZipExportProps) {
     }
   };
 
-  const handleCsvExport = () => {
+  const handleCsvExport = async () => {
     setExporting(true);
     setResult(null);
     try {
-      const csv = generateCSV(vehicles, csvOptions);
       const collection = collections.find((c) => c.id === selectedCollectionId);
       const collectionName = collection?.name.toLowerCase().replace(/\s+/g, '-') || 'vehicles';
       const date = new Date().toISOString().split('T')[0];
-      downloadCSV(csv, `${collectionName}-export-${date}.csv`);
-      setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
+
+      const vehiclesCsv = generateCSV(vehicles, csvOptions);
+
+      // Fetch documents and service records for all vehicles
+      const vehicleIds = vehicles.map((v) => v.id);
+      const vehicleNameMap = new Map(vehicles.map((v) => [v.id, v.name]));
+
+      const [docsRes, recordsRes] = await Promise.all([
+        vehicleIds.length > 0
+          ? supabase.from('vehicle_documents').select('*').in('motorcycle_id', vehicleIds)
+          : Promise.resolve({ data: [], error: null }),
+        vehicleIds.length > 0
+          ? supabase.from('service_records').select('*').in('motorcycle_id', vehicleIds).order('service_date', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const documents = ((docsRes.data || []) as VehicleDocument[]).map((d) => ({
+        ...d,
+        vehicle_name: vehicleNameMap.get(d.motorcycle_id) || '',
+      }));
+
+      const serviceRecords = ((recordsRes.data || []) as ServiceRecord[]).map((r) => ({
+        ...r,
+        vehicle_name: vehicleNameMap.get(r.motorcycle_id) || '',
+      }));
+
+      // If there are documents or service records, bundle as ZIP
+      if (documents.length > 0 || serviceRecords.length > 0) {
+        const JSZip = (await import('jszip')).default;
+        const zip = new JSZip();
+        let fileCount = 1;
+
+        zip.file('vehicles.csv', vehiclesCsv);
+
+        if (documents.length > 0) {
+          zip.file('documents.csv', generateDocumentsCSV(documents));
+          fileCount++;
+        }
+
+        if (serviceRecords.length > 0) {
+          zip.file('service-records.csv', generateServiceRecordsCSV(serviceRecords));
+          fileCount++;
+        }
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${collectionName}-export-${date}.zip`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        setResult({ success: true, totalFiles: fileCount, skippedFiles: 0, skippedDetails: [] });
+      } else {
+        // No related data, just download plain CSV
+        downloadCSV(vehiclesCsv, `${collectionName}-export-${date}.csv`);
+        setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
+      }
     } catch (err) {
       console.error('CSV export error:', err);
       setResult({ success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['CSV export failed'] });
@@ -254,7 +314,7 @@ export function ZipExport({ collections }: ZipExportProps) {
             <div>
               <div className="font-medium">CSV Spreadsheet</div>
               <div className="text-sm text-muted-foreground mt-0.5">
-                Data only — no photos or files
+                Vehicles, documents, and service records — no photos or files
               </div>
             </div>
           </div>
