@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'subscription',
+      allow_promotion_codes: true,
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?subscription=success`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings?subscription=canceled`,
       metadata: {
