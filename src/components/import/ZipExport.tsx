@@ -213,15 +213,15 @@ export function ZipExport({ collections }: ZipExportProps) {
         const zip = new JSZip();
         let fileCount = 1;
 
-        zip.file('vehicles.csv', vehiclesCsv);
+        zip.file('csv/vehicles.csv', vehiclesCsv);
 
         if (documents.length > 0) {
-          zip.file('documents.csv', generateDocumentsCSV(documents));
+          zip.file('csv/documents.csv', generateDocumentsCSV(documents));
           fileCount++;
         }
 
         if (serviceRecords.length > 0) {
-          zip.file('service-records.csv', generateServiceRecordsCSV(serviceRecords));
+          zip.file('csv/service-records.csv', generateServiceRecordsCSV(serviceRecords));
           fileCount++;
         }
 

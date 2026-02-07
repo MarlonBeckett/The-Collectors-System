@@ -260,7 +260,7 @@ async function addVehicleToZip(
     mileageHistory,
     valueHistory
   );
-  zip.file(`${basePath}/vehicle-info.json`, infoJson);
+  zip.file(`${basePath}/vehicle-data/vehicle-info.json`, infoJson);
 
   // Download and add photos
   const photoNames = new Set<string>();
@@ -281,7 +281,7 @@ async function addVehicleToZip(
         ? `${sanitizeFileName(photo.caption)}.${ext}`
         : photo.storage_path.split('/').pop() || `photo.${ext}`;
       const fileName = getUniqueFileName(photoNames, baseName);
-      zip.file(`${basePath}/photos/${fileName}`, blob);
+      zip.file(`${basePath}/images/photos/${fileName}`, blob);
       fileCounter.downloaded++;
     } else {
       fileCounter.skipped++;
@@ -304,7 +304,7 @@ async function addVehicleToZip(
     if (signal?.aborted) return;
     if (blob) {
       const fileName = getUniqueFileName(docNames, doc.file_name || doc.storage_path.split('/').pop() || 'document');
-      zip.file(`${basePath}/documents/${fileName}`, blob);
+      zip.file(`${basePath}/images/documents/${fileName}`, blob);
       fileCounter.downloaded++;
     } else {
       fileCounter.skipped++;
@@ -329,7 +329,7 @@ async function addVehicleToZip(
       if (blob) {
         const receiptFileName = receipt.file_name || receipt.storage_path.split('/').pop() || 'receipt';
         const fileName = getUniqueFileName(receiptNames, receiptFileName);
-        zip.file(`${basePath}/service-records/${fileName}`, blob);
+        zip.file(`${basePath}/images/receipts/${fileName}`, blob);
         fileCounter.downloaded++;
       } else {
         fileCounter.skipped++;
@@ -426,10 +426,10 @@ export async function exportCollectionZip(
   const date = new Date().toISOString().split('T')[0];
   const rootFolder = sanitizeFileName(`${collectionName}-${date}`);
 
-  // Add vehicles.csv
+  // Add vehicles.csv under csv/
   onProgress({ phase: 'Generating CSV', current: 0, total: 1, message: 'Generating vehicles.csv...' });
   const csv = generateCSV(typedVehicles, csvOptions);
-  zip.file(`${rootFolder}/vehicles.csv`, csv);
+  zip.file(`${rootFolder}/csv/vehicles.csv`, csv);
 
   const fileCounter = { downloaded: 0, skipped: 0, skippedDetails: [] as string[] };
   const vehicleFolderNames = new Set<string>();
@@ -451,7 +451,7 @@ export async function exportCollectionZip(
     await addVehicleToZip(
       zip,
       vehicle,
-      `${rootFolder}/${vehicleFolder}`,
+      `${rootFolder}/motorcycles/${vehicleFolder}`,
       supabase,
       onProgress,
       fileCounter,
