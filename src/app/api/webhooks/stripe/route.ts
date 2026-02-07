@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
         const { data: existingSub } = await supabase
           .from('subscriptions')
-          .select('user_id')
+          .select('user_id, cancel_at_period_end')
           .eq('stripe_subscription_id', subscription.id)
           .single();
 
@@ -89,12 +89,18 @@ export async function POST(request: NextRequest) {
 
         const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
 
+        // Only update cancel_at_period_end if:
+        // 1. Stripe says it's true (user cancelled), OR
+        // 2. It's currently false in our DB (safe to update either way)
+        // This prevents race conditions where multiple webhook events overwrite cancellation
+        const shouldUpdateCancelFlag = subscription.cancel_at_period_end || !existingSub.cancel_at_period_end;
+
         await supabase
           .from('subscriptions')
           .update({
             status,
             current_period_end: itemPeriodEnd ? new Date(itemPeriodEnd * 1000).toISOString() : null,
-            cancel_at_period_end: subscription.cancel_at_period_end,
+            ...(shouldUpdateCancelFlag && { cancel_at_period_end: subscription.cancel_at_period_end }),
           })
           .eq('stripe_subscription_id', subscription.id);
 
