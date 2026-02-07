@@ -124,7 +124,7 @@ export function VehicleStatus({ vehicle, canEdit = true }: VehicleStatusProps) {
       {/* Overall Status Card */}
       <div className={`border p-4 ${
         conditions.some(c => c.type === 'error') ? 'bg-destructive/10 border-destructive' :
-        conditions.some(c => c.type === 'warning') ? 'bg-amber-500/10 border-amber-500' :
+        conditions.some(c => c.type === 'warning') ? 'bg-destructive/10 border-destructive' :
         isGoodToGo ? 'bg-green-500/10 border-green-500' : 'bg-card border-border'
       }`}>
         <div className="flex items-center justify-between mb-2">
@@ -147,12 +147,8 @@ export function VehicleStatus({ vehicle, canEdit = true }: VehicleStatusProps) {
         ) : conditions.length > 0 ? (
           <div className="space-y-2">
             {conditions.map((condition, i) => (
-              <div key={i} className={`flex items-center gap-2 ${
-                condition.type === 'error' ? 'text-destructive' : 'text-amber-600 dark:text-amber-400'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${
-                  condition.type === 'error' ? 'bg-destructive' : 'bg-amber-500'
-                }`} />
+              <div key={i} className="flex items-center gap-2 text-destructive">
+                <span className="w-2 h-2 rounded-full bg-destructive" />
                 <span className="font-medium">{condition.message}</span>
               </div>
             ))}
@@ -171,7 +167,7 @@ export function VehicleStatus({ vehicle, canEdit = true }: VehicleStatusProps) {
       {(vehicle.status === 'active' || vehicle.status === 'maintenance') && (
         <div className={`border p-4 ${
           tabsExpired ? 'bg-destructive/10 border-destructive' :
-          needsTabsRenewed ? 'bg-amber-500/10 border-amber-500' : 'bg-card border-border'
+          needsTabsRenewed ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'
         }`}>
           <h2 className="text-sm font-medium text-muted-foreground mb-2">Tab Expiration</h2>
           <div className="flex items-center justify-between">

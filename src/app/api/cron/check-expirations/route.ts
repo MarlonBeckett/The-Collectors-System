@@ -6,6 +6,7 @@ interface ExpiringBike {
   name: string;
   plate_number: string | null;
   tab_expiration: string;
+  vehicle_type: string | null;
 }
 
 async function sendEmail(to: string[], subject: string, html: string) {
@@ -16,7 +17,7 @@ async function sendEmail(to: string[], subject: string, html: string) {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      from: 'The Collectors System <onboarding@resend.dev>',
+      from: 'The Collectors System <notifications@thecollectorssystem.com>',
       to,
       subject,
       html,
@@ -80,7 +81,7 @@ export async function GET(request: Request) {
       // Get bikes expiring on this date
       const { data: expiringBikes } = await supabaseAdmin
         .from('motorcycles')
-        .select('id, name, plate_number, tab_expiration')
+        .select('id, name, plate_number, tab_expiration, vehicle_type')
         .eq('tab_expiration', targetDate)
         .eq('status', 'active');
 
@@ -120,15 +121,15 @@ export async function GET(request: Request) {
 
       switch (type) {
         case '0_day':
-          subject = '🚨 Motorcycle tabs expire TODAY!';
+          subject = '🚨 Vehicle tabs expire TODAY!';
           urgency = 'expire TODAY';
           break;
         case '7_day':
-          subject = '⚠️ Motorcycle tabs expiring in 7 days';
+          subject = '⚠️ Vehicle tabs expiring in 7 days';
           urgency = 'expire in 7 days';
           break;
         case '30_day':
-          subject = '📅 Motorcycle tabs expiring in 30 days';
+          subject = '📅 Vehicle tabs expiring in 30 days';
           urgency = 'expire in 30 days';
           break;
       }
@@ -143,7 +144,7 @@ export async function GET(request: Request) {
       const html = `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">The Collectors System</h2>
-          <p>The following motorcycle tabs ${urgency}:</p>
+          <p>The following vehicle tabs ${urgency}:</p>
           <ul style="line-height: 1.8;">
             ${bikeList}
           </ul>

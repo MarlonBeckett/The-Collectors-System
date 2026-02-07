@@ -8,7 +8,7 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-export function SearchBar({ onSearch, placeholder = 'Search bikes...' }: SearchBarProps) {
+export function SearchBar({ onSearch, placeholder = 'Search vehicles...' }: SearchBarProps) {
   const [query, setQuery] = useState('');
 
   const debouncedSearch = useCallback(

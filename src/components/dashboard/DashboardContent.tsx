@@ -87,9 +87,6 @@ export function DashboardContent({ collections, vehicles, subscriptionInfo }: Da
           currentCollectionId={selectedCollectionId}
           onSelect={handleSelectCollection}
         />
-        <p className="text-muted-foreground mt-1">
-          {filteredVehicles.length} vehicle{filteredVehicles.length !== 1 ? 's' : ''} in this collection
-        </p>
       </div>
 
       {!subscriptionInfo.isPro && (

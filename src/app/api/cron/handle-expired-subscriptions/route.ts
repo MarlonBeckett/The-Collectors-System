@@ -35,7 +35,7 @@ async function sendEmail(to: string, subject: string, html: string) {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      from: 'The Collectors System <onboarding@resend.dev>',
+      from: 'The Collectors System <notifications@thecollectorssystem.com>',
       to: [to],
       subject,
       html,

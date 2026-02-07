@@ -1,4 +1,13 @@
+import type { Metadata } from 'next';
 import { SignupForm } from '@/components/auth/SignupForm';
+
+export const metadata: Metadata = {
+  title: 'Sign Up',
+  description: 'Create a free account on The Collectors System and start tracking your vehicle collection.',
+  alternates: {
+    canonical: '/signup',
+  },
+};
 
 export default function SignupPage() {
   return (

@@ -35,10 +35,10 @@ const categoryLabels: Record<ServiceCategory, string> = {
 };
 
 const categoryColors: Record<ServiceCategory, string> = {
-  maintenance: 'bg-blue-500/20 text-blue-400',
-  repair: 'bg-red-500/20 text-red-400',
-  upgrade: 'bg-green-500/20 text-green-400',
-  inspection: 'bg-yellow-500/20 text-yellow-400',
+  maintenance: 'bg-blue-500/20 text-blue-700 dark:text-blue-400',
+  repair: 'bg-red-500/20 text-red-700 dark:text-red-400',
+  upgrade: 'bg-green-500/20 text-green-700 dark:text-green-400',
+  inspection: 'bg-destructive/20 text-destructive',
 };
 
 export function ServiceRecordsSection({ motorcycleId, serviceRecords: initialRecords, canEdit = true }: ServiceRecordsSectionProps) {

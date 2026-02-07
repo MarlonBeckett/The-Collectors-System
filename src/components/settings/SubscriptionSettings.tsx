@@ -68,8 +68,8 @@ export default function SubscriptionSettings({
 
       {/* Status warnings */}
       {subscription?.status === 'past_due' && (
-        <div className="bg-yellow-500/10 p-4 border border-yellow-500/30">
-          <p className="text-sm text-yellow-500">
+        <div className="bg-destructive/10 p-4 border border-destructive/30">
+          <p className="text-sm text-destructive">
             Your payment is past due. Please update your payment method to
             continue your Pro subscription.
           </p>
@@ -77,12 +77,12 @@ export default function SubscriptionSettings({
       )}
 
       {subscription?.cancel_at_period_end && subscription.status === 'active' && (
-        <div className="bg-orange-500/10 p-4 border border-orange-500/30 space-y-3">
+        <div className="bg-destructive/10 p-4 border border-destructive/30 space-y-3">
           <div>
-            <p className="font-semibold text-orange-500">
+            <p className="font-semibold text-destructive">
               Your subscription has been cancelled
             </p>
-            <p className="text-sm text-orange-500 mt-1">
+            <p className="text-sm text-destructive mt-1">
               {(() => {
                 if (!subscription.current_period_end) return 'Your access will end soon.';
                 const endDate = new Date(subscription.current_period_end);
@@ -94,11 +94,11 @@ export default function SubscriptionSettings({
               })()}
             </p>
           </div>
-          <div className="bg-orange-500/10 p-3 border border-orange-500/20">
-            <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">
+          <div className="bg-destructive/10 p-3 border border-destructive/20">
+            <p className="text-sm text-destructive font-medium">
               Important: Export your data before your subscription ends
             </p>
-            <p className="text-sm text-orange-500 mt-1">
+            <p className="text-sm text-destructive mt-1">
               When your subscription expires, vehicles beyond the free limit will be deleted.
               Go to your collection and use the CSV export to save a backup of all your vehicles.
             </p>
@@ -140,7 +140,7 @@ export default function SubscriptionSettings({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Access ends</p>
-                <p className="font-medium text-orange-500">
+                <p className="font-medium text-destructive">
                   {formatDate(subscription?.current_period_end ?? null)}
                 </p>
               </div>

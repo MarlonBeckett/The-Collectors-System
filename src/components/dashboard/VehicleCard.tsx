@@ -26,7 +26,7 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
       href={`/vehicles/${vehicle.id}`}
       className={`block bg-card border border-border p-4 hover:border-primary transition-colors ${
         isInactive ? 'opacity-60' : ''
-      } ${vehicle.status === 'maintenance' ? 'border-l-4 border-l-amber-500' : ''}`}
+      } ${vehicle.status === 'maintenance' ? 'border-l-4 border-l-destructive' : ''}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -63,7 +63,7 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
         )}
 
         {vehicle.status === 'maintenance' && (
-          <span className="px-2 py-1 text-xs font-medium uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          <span className="px-2 py-1 text-xs font-medium uppercase bg-destructive/10 text-destructive">
             Maintenance
           </span>
         )}
@@ -95,7 +95,7 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
       </div>
 
       {vehicle.status === 'maintenance' && vehicle.maintenance_notes && (
-        <div className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+        <div className="mt-2 text-sm text-destructive">
           {vehicle.maintenance_notes}
         </div>
       )}

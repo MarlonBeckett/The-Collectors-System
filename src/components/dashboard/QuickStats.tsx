@@ -35,8 +35,8 @@ export function QuickStats({ vehicles }: QuickStatsProps) {
         <p className="text-sm text-muted-foreground">Needs Tabs Renewed</p>
       </div>
 
-      <div className={`border p-4 ${maintenanceCount > 0 ? 'bg-amber-500/10 border-amber-500' : 'bg-card border-border'}`}>
-        <p className={`text-3xl font-bold ${maintenanceCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
+      <div className={`border p-4 ${maintenanceCount > 0 ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'}`}>
+        <p className={`text-3xl font-bold ${maintenanceCount > 0 ? 'text-destructive' : 'text-foreground'}`}>
           {maintenanceCount}
         </p>
         <p className="text-sm text-muted-foreground">Needs Maintenance</p>

@@ -1,7 +1,7 @@
 {
   "name": "The Collectors System",
   "short_name": "Collectors",
-  "description": "Motorcycle collection management",
+  "description": "Track and manage your vehicle collection — photos, service history, documents, and more",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a1a",
@@ -11,11 +11,6 @@
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
       "type": "image/png"
     }
   ]

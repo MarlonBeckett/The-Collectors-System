@@ -32,12 +32,12 @@ const documentTypeLabels: Record<DocumentType, string> = {
 };
 
 const documentTypeColors: Record<DocumentType, string> = {
-  title: 'bg-purple-500/20 text-purple-400',
-  registration: 'bg-blue-500/20 text-blue-400',
-  insurance: 'bg-green-500/20 text-green-400',
-  receipt: 'bg-yellow-500/20 text-yellow-400',
-  manual: 'bg-cyan-500/20 text-cyan-400',
-  other: 'bg-gray-500/20 text-gray-400',
+  title: 'bg-purple-500/20 text-purple-700 dark:text-purple-400',
+  registration: 'bg-blue-500/20 text-blue-700 dark:text-blue-400',
+  insurance: 'bg-green-500/20 text-green-700 dark:text-green-400',
+  receipt: 'bg-destructive/20 text-destructive',
+  manual: 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-400',
+  other: 'bg-gray-500/20 text-gray-600 dark:text-gray-400',
 };
 
 const isExpiringSoon = (date: string | null): boolean => {
@@ -249,7 +249,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
             {documents.length} document{documents.length !== 1 ? 's' : ''}
           </span>
           {expirationWarnings > 0 && (
-            <span className="flex items-center gap-1 text-amber-500">
+            <span className="flex items-center gap-1 text-destructive">
               <ExclamationTriangleIcon className="w-4 h-4" />
               {expirationWarnings} expiring
             </span>
@@ -394,7 +394,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
                     </button>
                     <div className="text-right flex-shrink-0">
                       {doc.expiration_date && (
-                        <div className={`text-sm ${expired ? 'text-destructive' : expiringSoon ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                        <div className={`text-sm ${expired ? 'text-destructive' : expiringSoon ? 'text-destructive' : 'text-muted-foreground'}`}>
                           {expired ? 'Expired ' : expiringSoon ? 'Expires ' : 'Exp. '}
                           {formatDate(doc.expiration_date)}
                         </div>

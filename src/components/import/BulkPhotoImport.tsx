@@ -391,7 +391,7 @@ export function BulkPhotoImport({ collections }: BulkPhotoImportProps) {
             </p>
           )}
           {selectedCollectionId && bikes.length === 0 && (
-            <p className="text-sm text-amber-600 mt-2">
+            <p className="text-sm text-destructive mt-2">
               No vehicles in this collection. Import vehicles first before adding photos.
             </p>
           )}
