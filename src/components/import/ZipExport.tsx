@@ -449,6 +449,7 @@ export function ZipExport({ collections }: ZipExportProps) {
             </div>
           )}
           <p className="text-xs text-muted-foreground truncate">{progress.message}</p>
+          <p className="text-xs text-destructive font-medium">Don&apos;t leave this page or progress will be lost. This may take a little while.</p>
         </div>
       )}
 
