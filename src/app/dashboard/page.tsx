@@ -6,7 +6,6 @@ import { DashboardContent } from '@/components/dashboard/DashboardContent';
 import { getUserSubscription } from '@/lib/subscription.server';
 import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
-export const dynamic = 'force-dynamic';
 
 interface UserCollection {
   id: string;
@@ -47,6 +46,27 @@ export default async function DashboardPage() {
 
   const vehicles = (data || []) as Motorcycle[];
 
+  // Fetch showcase photos for the carousel and generate signed URLs server-side
+  const { data: showcasePhotos } = await supabase
+    .from('photos')
+    .select('motorcycle_id, storage_path')
+    .eq('is_showcase', true);
+
+  const vehiclePhotoMap: Record<string, string> = {};
+  if (showcasePhotos && showcasePhotos.length > 0) {
+    const paths = showcasePhotos.map(p => p.storage_path);
+    const { data: urlData } = await supabase.storage
+      .from('motorcycle-photos')
+      .createSignedUrls(paths, 3600);
+    if (urlData) {
+      urlData.forEach((item, i) => {
+        if (item.signedUrl) {
+          vehiclePhotoMap[showcasePhotos[i].motorcycle_id] = item.signedUrl;
+        }
+      });
+    }
+  }
+
   // Get subscription info for upgrade banner
   const subscription = await getUserSubscription();
   const isProUser = isPro(subscription);
@@ -72,6 +92,7 @@ export default async function DashboardPage() {
       <DashboardContent
         collections={collections}
         vehicles={vehicles}
+        vehiclePhotoMap={vehiclePhotoMap}
         subscriptionInfo={subscriptionInfo}
       />
     </AppShell>

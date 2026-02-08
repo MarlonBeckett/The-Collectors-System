@@ -4,8 +4,6 @@ import { redirect } from 'next/navigation';
 import { SettingsContent } from './SettingsContent';
 import { getUserSubscription } from '@/lib/subscription.server';
 
-export const dynamic = 'force-dynamic';
-
 interface UserCollection {
   id: string;
   name: string;

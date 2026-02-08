@@ -20,6 +20,7 @@ interface DocumentsSectionProps {
   motorcycleId: string;
   documents: VehicleDocument[];
   canEdit?: boolean;
+  initialUrls?: Record<string, string>;
 }
 
 const documentTypeLabels: Record<DocumentType, string> = {
@@ -53,13 +54,13 @@ const isExpired = (date: string | null): boolean => {
   return new Date(date) < new Date();
 };
 
-export function DocumentsSection({ motorcycleId, documents: initialDocuments, canEdit = true }: DocumentsSectionProps) {
+export function DocumentsSection({ motorcycleId, documents: initialDocuments, canEdit = true, initialUrls = {} }: DocumentsSectionProps) {
   const router = useRouter();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [documents, setDocuments] = useState<VehicleDocument[]>(initialDocuments);
-  const [documentUrls, setDocumentUrls] = useState<Record<string, string>>({});
+  const [documentUrls, setDocumentUrls] = useState<Record<string, string>>(initialUrls);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -73,19 +74,22 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Load signed URLs for all documents
+  // Load signed URLs for new documents not already in initialUrls
   useEffect(() => {
+    const missingDocs = documents.filter(d => !documentUrls[d.id]);
+    if (missingDocs.length === 0) return;
     const loadDocumentUrls = async () => {
-      const urls: Record<string, string> = {};
-      for (const doc of documents) {
-        const { data } = await supabase.storage
-          .from('vehicle-documents')
-          .createSignedUrl(doc.storage_path, 3600);
-        if (data?.signedUrl) {
-          urls[doc.id] = data.signedUrl;
-        }
+      const paths = missingDocs.map(d => d.storage_path);
+      const { data } = await supabase.storage
+        .from('vehicle-documents')
+        .createSignedUrls(paths, 3600);
+      if (data) {
+        const urls: Record<string, string> = {};
+        data.forEach((item, i) => {
+          if (item.signedUrl) urls[missingDocs[i].id] = item.signedUrl;
+        });
+        setDocumentUrls(prev => ({ ...prev, ...urls }));
       }
-      setDocumentUrls(urls);
     };
     loadDocumentUrls();
   }, [documents, supabase]);

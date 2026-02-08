@@ -26,12 +26,13 @@ interface SubscriptionInfo {
 interface DashboardContentProps {
   collections: UserCollection[];
   vehicles: Motorcycle[];
+  vehiclePhotoMap: Record<string, string>;
   subscriptionInfo: SubscriptionInfo;
 }
 
 const STORAGE_KEY = 'selectedCollectionId';
 
-export function DashboardContent({ collections, vehicles, subscriptionInfo }: DashboardContentProps) {
+export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subscriptionInfo }: DashboardContentProps) {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -95,7 +96,7 @@ export function DashboardContent({ collections, vehicles, subscriptionInfo }: Da
         </div>
       )}
 
-      <VehicleList vehicles={filteredVehicles} />
+      <VehicleList vehicles={filteredVehicles} vehiclePhotoMap={vehiclePhotoMap} />
     </div>
   );
 }

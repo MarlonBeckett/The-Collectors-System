@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
-export const dynamic = 'force-dynamic';
-
 interface EditBikePageProps {
   params: Promise<{ id: string }>;
 }

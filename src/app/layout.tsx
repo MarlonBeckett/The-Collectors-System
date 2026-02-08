@@ -74,9 +74,16 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = localStorage.getItem('theme');
-                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                  document.documentElement.classList.add('dark');
+                var d = document.documentElement;
+                var theme = localStorage.getItem('theme');
+                var isDark = theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (isDark) {
+                  d.classList.add('dark');
+                  d.style.backgroundColor = '#1a1a1a';
+                  d.style.color = '#e0e0e0';
+                } else {
+                  d.style.backgroundColor = '#cccccc';
+                  d.style.color = '#1f1f1f';
                 }
               })();
             `,

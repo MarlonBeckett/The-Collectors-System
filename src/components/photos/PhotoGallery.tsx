@@ -3,39 +3,17 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Photo } from '@/types/database';
-import { createClient } from '@/lib/supabase/client';
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface PhotoGalleryProps {
   photos: Photo[];
   motorcycleName: string;
+  imageUrls: Record<string, string>;
 }
 
-export function PhotoGallery({ photos, motorcycleName }: PhotoGalleryProps) {
+export function PhotoGallery({ photos, motorcycleName, imageUrls }: PhotoGalleryProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
-  const supabase = createClient();
-
-  useEffect(() => {
-    // Generate signed URLs for all photos
-    const loadUrls = async () => {
-      const urls: Record<string, string> = {};
-      for (const photo of photos) {
-        const { data } = await supabase.storage
-          .from('motorcycle-photos')
-          .createSignedUrl(photo.storage_path, 3600); // 1 hour expiry
-        if (data?.signedUrl) {
-          urls[photo.id] = data.signedUrl;
-        }
-      }
-      setImageUrls(urls);
-    };
-
-    if (photos.length > 0) {
-      loadUrls();
-    }
-  }, [photos, supabase]);
 
   if (photos.length === 0) {
     return (

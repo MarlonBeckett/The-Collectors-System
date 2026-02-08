@@ -6,10 +6,12 @@ import { Motorcycle } from '@/types/database';
 import { VehicleCard } from './VehicleCard';
 import { SearchBar } from './SearchBar';
 import { QuickStats } from './QuickStats';
+import { VehicleCarousel } from './VehicleCarousel';
 import { daysUntilExpiration } from '@/lib/dateUtils';
 
 interface VehicleListProps {
   vehicles: Motorcycle[];
+  vehiclePhotoMap: Record<string, string>;
 }
 
 type FilterTab = 'all' | 'tabs' | 'maintenance' | 'sold';
@@ -26,7 +28,7 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'added-asc', label: 'Date Added (oldest first)' },
 ];
 
-export function VehicleList({ vehicles }: VehicleListProps) {
+export function VehicleList({ vehicles, vehiclePhotoMap }: VehicleListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
@@ -173,6 +175,7 @@ export function VehicleList({ vehicles }: VehicleListProps) {
 
   return (
     <div className="space-y-4">
+      <VehicleCarousel vehicles={vehicles} vehiclePhotoMap={vehiclePhotoMap} />
       <QuickStats vehicles={vehicles} />
 
       <div className="sticky top-14 z-40 bg-background py-2">

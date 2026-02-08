@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
-export const dynamic = 'force-dynamic';
-
 async function getUserRoleForCollection(supabase: Awaited<ReturnType<typeof createClient>>, collectionId: string): Promise<CollectionRole | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

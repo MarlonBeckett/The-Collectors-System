@@ -22,29 +22,29 @@ export function QuickStats({ vehicles }: QuickStatsProps) {
   const needsTabsRenewed = expiredCount + soonCount;
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="bg-card border border-border p-4">
-        <p className="text-3xl font-bold text-foreground">{activeVehicles.length}</p>
-        <p className="text-sm text-muted-foreground">Active Vehicles</p>
+    <div className="flex gap-2">
+      <div className="flex-1 bg-card border border-border p-2 text-center">
+        <p className="text-xl font-bold text-foreground">{activeVehicles.length}</p>
+        <p className="text-xs text-muted-foreground">Active</p>
       </div>
 
-      <div className={`border p-4 ${needsTabsRenewed > 0 ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'}`}>
-        <p className={`text-3xl font-bold ${needsTabsRenewed > 0 ? 'text-destructive' : 'text-foreground'}`}>
+      <div className={`flex-1 border p-2 text-center ${needsTabsRenewed > 0 ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'}`}>
+        <p className={`text-xl font-bold ${needsTabsRenewed > 0 ? 'text-destructive' : 'text-foreground'}`}>
           {needsTabsRenewed}
         </p>
-        <p className="text-sm text-muted-foreground">Needs Tabs Renewed</p>
+        <p className="text-xs text-muted-foreground">Tabs</p>
       </div>
 
-      <div className={`border p-4 ${maintenanceCount > 0 ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'}`}>
-        <p className={`text-3xl font-bold ${maintenanceCount > 0 ? 'text-destructive' : 'text-foreground'}`}>
+      <div className={`flex-1 border p-2 text-center ${maintenanceCount > 0 ? 'bg-destructive/10 border-destructive' : 'bg-card border-border'}`}>
+        <p className={`text-xl font-bold ${maintenanceCount > 0 ? 'text-destructive' : 'text-foreground'}`}>
           {maintenanceCount}
         </p>
-        <p className="text-sm text-muted-foreground">Needs Maintenance</p>
+        <p className="text-xs text-muted-foreground">Maint.</p>
       </div>
 
-      <div className="bg-card border border-border p-4">
-        <p className="text-3xl font-bold text-foreground">{vehicles.length}</p>
-        <p className="text-sm text-muted-foreground">Total</p>
+      <div className="flex-1 bg-card border border-border p-2 text-center">
+        <p className="text-xl font-bold text-foreground">{vehicles.length}</p>
+        <p className="text-xs text-muted-foreground">Total</p>
       </div>
     </div>
   );

@@ -10,8 +10,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { LandingNav } from '@/components/layout/LandingNav';
 
-export const dynamic = 'force-dynamic';
-
 const features = [
   {
     icon: RectangleStackIcon,

@@ -5,7 +5,8 @@ import { useDropzone } from 'react-dropzone';
 import { createClient } from '@/lib/supabase/client';
 import { Photo } from '@/types/database';
 import Image from 'next/image';
-import { CloudArrowUpIcon, XMarkIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
+import { CloudArrowUpIcon, XMarkIcon, ArrowsUpDownIcon, StarIcon as StarOutline } from '@heroicons/react/24/outline';
+import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
 
 interface PhotoUploaderProps {
   motorcycleId: string;
@@ -35,17 +36,20 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
 
       if (data) {
         setPhotos(data);
-        // Load signed URLs
-        const urls: Record<string, string> = {};
-        for (const photo of data) {
+        // Load signed URLs in a single batch request
+        if (data.length > 0) {
+          const paths = data.map(p => p.storage_path);
           const { data: urlData } = await supabase.storage
             .from('motorcycle-photos')
-            .createSignedUrl(photo.storage_path, 3600);
-          if (urlData?.signedUrl) {
-            urls[photo.id] = urlData.signedUrl;
+            .createSignedUrls(paths, 3600);
+          if (urlData) {
+            const urls: Record<string, string> = {};
+            urlData.forEach((item, i) => {
+              if (item.signedUrl) urls[data[i].id] = item.signedUrl;
+            });
+            setImageUrls(urls);
           }
         }
-        setImageUrls(urls);
       }
     };
 
@@ -193,6 +197,33 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
     }
   };
 
+  const toggleShowcase = async (photo: Photo) => {
+    const isCurrentShowcase = photo.is_showcase;
+
+    // Unset any existing showcase for this vehicle
+    await supabase
+      .from('photos')
+      .update({ is_showcase: false })
+      .eq('motorcycle_id', motorcycleId)
+      .eq('is_showcase', true);
+
+    if (!isCurrentShowcase) {
+      // Set the new showcase
+      await supabase
+        .from('photos')
+        .update({ is_showcase: true })
+        .eq('id', photo.id);
+    }
+
+    // Update local state
+    setPhotos(prev =>
+      prev.map(p => ({
+        ...p,
+        is_showcase: !isCurrentShowcase && p.id === photo.id,
+      }))
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Upload Zone */}
@@ -264,6 +295,13 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
             </button>
           </div>
 
+          {/* Showcase hint */}
+          {!photos.some(p => p.is_showcase) && (
+            <p className="text-xs text-muted-foreground">
+              Tap the star on a photo to feature it in the dashboard carousel.
+            </p>
+          )}
+
           <div className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <div
@@ -293,9 +331,33 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
                   <XMarkIcon className="w-4 h-4" />
                 </button>
 
+                {/* Showcase Toggle */}
+                <button
+                  type="button"
+                  onClick={() => toggleShowcase(photo)}
+                  className={`absolute bottom-1 left-1 right-1 flex items-center justify-center gap-1 py-1 ${
+                    photo.is_showcase
+                      ? 'bg-yellow-500/90 text-black'
+                      : 'bg-black/50 text-white/80 hover:bg-black/70'
+                  }`}
+                  aria-label={photo.is_showcase ? 'Remove from dashboard' : 'Feature on dashboard'}
+                >
+                  {photo.is_showcase ? (
+                    <>
+                      <StarSolid className="w-4 h-4" />
+                      <span className="text-xs font-medium">Featured</span>
+                    </>
+                  ) : (
+                    <>
+                      <StarOutline className="w-4 h-4" />
+                      <span className="text-xs">Feature</span>
+                    </>
+                  )}
+                </button>
+
                 {/* Reorder Buttons */}
                 {isReordering && (
-                  <div className="absolute bottom-1 left-1 right-1 flex gap-1">
+                  <div className="absolute bottom-8 left-1 right-1 flex gap-1">
                     {index > 0 && (
                       <button
                         type="button"

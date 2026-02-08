@@ -5,8 +5,6 @@ import { ImportPageContent } from './ImportPageContent';
 import { getUserSubscription } from '@/lib/subscription.server';
 import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
-export const dynamic = 'force-dynamic';
-
 interface UserCollection {
   id: string;
   name: string;

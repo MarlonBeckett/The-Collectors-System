@@ -2,50 +2,50 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --background: oklch(0.8452 0 0);
-  --foreground: oklch(0.2393 0 0);
-  --card: oklch(0.7572 0 0);
-  --card-foreground: oklch(0.2393 0 0);
-  --popover: oklch(0.7572 0 0);
-  --popover-foreground: oklch(0.2393 0 0);
-  --primary: oklch(0.5016 0.1887 27.4816);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.4200 0.1300 140);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.7826 0 0);
-  --muted-foreground: oklch(0.4091 0 0);
-  --accent: oklch(0.5880 0.0993 245.7394);
-  --accent-foreground: oklch(1.0000 0 0);
-  --destructive: oklch(0.5500 0.2200 30);
-  --destructive-foreground: oklch(0 0 0);
-  --border: oklch(0.4313 0 0);
-  --input: oklch(0.4313 0 0);
-  --ring: oklch(0.5016 0.1887 27.4816);
+  --background: #cccccc;
+  --foreground: #1f1f1f;
+  --card: #b0b0b0;
+  --card-foreground: #1f1f1f;
+  --popover: #b0b0b0;
+  --popover-foreground: #1f1f1f;
+  --primary: #b71c1c;
+  --primary-foreground: #ffffff;
+  --secondary: #1c5d07;
+  --secondary-foreground: #ffffff;
+  --muted: #b8b8b8;
+  --muted-foreground: #4a4a4a;
+  --accent: #4682b4;
+  --accent-foreground: #ffffff;
+  --destructive: #d41101;
+  --destructive-foreground: #000000;
+  --border: #505050;
+  --input: #505050;
+  --ring: #b71c1c;
   --font-sans: "Oxanium", sans-serif;
   --font-mono: "Source Code Pro", monospace;
   --radius: 0px;
 }
 
 .dark {
-  --background: oklch(0.2178 0 0);
-  --foreground: oklch(0.9067 0 0);
-  --card: oklch(0.2850 0 0);
-  --card-foreground: oklch(0.9067 0 0);
-  --popover: oklch(0.2850 0 0);
-  --popover-foreground: oklch(0.9067 0 0);
-  --primary: oklch(0.6083 0.2090 27.0276);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.6423 0.1467 133.0145);
-  --secondary-foreground: oklch(0 0 0);
-  --muted: oklch(0.2645 0 0);
-  --muted-foreground: oklch(0.7058 0 0);
-  --accent: oklch(0.7482 0.1235 244.7492);
-  --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.7000 0.2100 27);
-  --destructive-foreground: oklch(0 0 0);
-  --border: oklch(0.4091 0 0);
-  --input: oklch(0.4091 0 0);
-  --ring: oklch(0.6083 0.2090 27.0276);
+  --background: #1a1a1a;
+  --foreground: #e0e0e0;
+  --card: #2a2a2a;
+  --card-foreground: #e0e0e0;
+  --popover: #2a2a2a;
+  --popover-foreground: #e0e0e0;
+  --primary: #e53935;
+  --primary-foreground: #ffffff;
+  --secondary: #689f38;
+  --secondary-foreground: #000000;
+  --muted: #252525;
+  --muted-foreground: #a0a0a0;
+  --accent: #64b5f6;
+  --accent-foreground: #000000;
+  --destructive: #ff5a51;
+  --destructive-foreground: #000000;
+  --border: #4a4a4a;
+  --input: #4a4a4a;
+  --ring: #e53935;
 }
 
 @theme inline {

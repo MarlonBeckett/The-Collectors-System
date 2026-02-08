@@ -89,6 +89,7 @@ export interface Photo {
   storage_path: string;
   display_order: number;
   caption: string | null;
+  is_showcase: boolean;
   created_at: string;
   uploaded_by: string | null;
 }

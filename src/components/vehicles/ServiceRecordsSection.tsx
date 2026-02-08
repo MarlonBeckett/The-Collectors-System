@@ -25,6 +25,7 @@ interface ServiceRecordsSectionProps {
   motorcycleId: string;
   serviceRecords: ServiceRecordWithReceipts[];
   canEdit?: boolean;
+  initialReceiptUrls?: Record<string, string>;
 }
 
 const categoryLabels: Record<ServiceCategory, string> = {
@@ -41,13 +42,13 @@ const categoryColors: Record<ServiceCategory, string> = {
   inspection: 'bg-destructive/20 text-destructive',
 };
 
-export function ServiceRecordsSection({ motorcycleId, serviceRecords: initialRecords, canEdit = true }: ServiceRecordsSectionProps) {
+export function ServiceRecordsSection({ motorcycleId, serviceRecords: initialRecords, canEdit = true, initialReceiptUrls = {} }: ServiceRecordsSectionProps) {
   const router = useRouter();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [serviceRecords, setServiceRecords] = useState<ServiceRecordWithReceipts[]>(initialRecords);
-  const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({});
+  const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>(initialReceiptUrls);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -63,23 +64,25 @@ export function ServiceRecordsSection({ motorcycleId, serviceRecords: initialRec
   const [shopName, setShopName] = useState('');
   const [description, setDescription] = useState('');
 
-  // Load receipt URLs
+  // Load receipt URLs only for new receipts not already in initialReceiptUrls
   useEffect(() => {
+    const allReceipts = serviceRecords.flatMap(
+      r => (r.receipts || []).map(receipt => receipt)
+    );
+    const missingReceipts = allReceipts.filter(r => !receiptUrls[r.id]);
+    if (missingReceipts.length === 0) return;
     const loadReceiptUrls = async () => {
-      const urls: Record<string, string> = {};
-      for (const record of serviceRecords) {
-        if (record.receipts) {
-          for (const receipt of record.receipts) {
-            const { data } = await supabase.storage
-              .from('service-receipts')
-              .createSignedUrl(receipt.storage_path, 3600);
-            if (data?.signedUrl) {
-              urls[receipt.id] = data.signedUrl;
-            }
-          }
-        }
+      const paths = missingReceipts.map(r => r.storage_path);
+      const { data } = await supabase.storage
+        .from('service-receipts')
+        .createSignedUrls(paths, 3600);
+      if (data) {
+        const urls: Record<string, string> = {};
+        data.forEach((item, i) => {
+          if (item.signedUrl) urls[missingReceipts[i].id] = item.signedUrl;
+        });
+        setReceiptUrls(prev => ({ ...prev, ...urls }));
       }
-      setReceiptUrls(urls);
     };
     loadReceiptUrls();
   }, [serviceRecords, supabase]);

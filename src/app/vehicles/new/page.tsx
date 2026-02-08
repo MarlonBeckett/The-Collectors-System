@@ -7,8 +7,6 @@ import { ArrowLeftIcon, DocumentArrowDownIcon, PhotoIcon } from '@heroicons/reac
 import { getUserSubscription } from '@/lib/subscription.server';
 import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
-export const dynamic = 'force-dynamic';
-
 export default async function NewVehiclePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
