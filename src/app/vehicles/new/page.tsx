@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { VehicleForm } from '@/components/vehicles/VehicleForm';
-import { VehicleJsonUpload } from '@/components/import/VehicleJsonUpload';
+import { VehicleZipImport } from '@/components/import/VehicleZipImport';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -116,10 +116,10 @@ export default async function NewVehiclePage() {
 
         <VehicleForm mode="create" collections={editableCollections} />
 
-        {/* JSON Import Section */}
+        {/* ZIP Import Section */}
         <div className="mt-8 pt-6 border-t border-border">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Import from JSON</h2>
-          <VehicleJsonUpload collections={editableCollections} />
+          <h2 className="text-lg font-semibold text-foreground mb-4">Already have a TCS export?</h2>
+          <VehicleZipImport collections={editableCollections} />
         </div>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">

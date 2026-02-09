@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useRouter } from 'next/navigation';
+import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
-import { DocumentArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { DocumentType, ServiceCategory } from '@/types/database';
 
@@ -14,7 +15,7 @@ interface UserCollection {
   is_owner: boolean;
 }
 
-interface VehicleJsonUploadProps {
+interface VehicleZipImportProps {
   collections: UserCollection[];
 }
 
@@ -43,6 +44,12 @@ interface VehicleJsonData {
       notes?: string;
     } | null;
   };
+  photos?: {
+    storage_path?: string;
+    display_order?: number;
+    caption?: string | null;
+    is_showcase?: boolean;
+  }[];
   documents?: {
     title: string;
     document_type?: string;
@@ -77,14 +84,29 @@ interface VehicleJsonData {
   }[];
 }
 
+interface ZipFileEntry {
+  name: string;
+  entry: JSZip.JSZipObject;
+}
+
+interface ZipFiles {
+  photos: ZipFileEntry[];
+  documents: ZipFileEntry[];
+  receipts: ZipFileEntry[];
+}
+
 const VALID_DOC_TYPES: DocumentType[] = ['title', 'registration', 'insurance', 'receipt', 'manual', 'other'];
 const VALID_SERVICE_CATEGORIES: ServiceCategory[] = ['maintenance', 'repair', 'upgrade', 'inspection'];
 
-export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
+export function VehicleZipImport({ collections }: VehicleZipImportProps) {
   const [jsonData, setJsonData] = useState<VehicleJsonData | null>(null);
+  const [zipFiles, setZipFiles] = useState<ZipFiles>({ photos: [], documents: [], receipts: [] });
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  const zipRef = useRef<JSZip | null>(null);
 
   const defaultCollection = collections.find(c => c.is_owner) || collections[0];
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
@@ -98,26 +120,68 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
 
     setError(null);
     setDone(false);
+    setJsonData(null);
+    setZipFiles({ photos: [], documents: [], receipts: [] });
+    zipRef.current = null;
 
     try {
-      const text = await file.text();
-      const data = JSON.parse(text) as VehicleJsonData;
+      const zip = await JSZip.loadAsync(file);
+      zipRef.current = zip;
 
-      if (!data.vehicle?.name) {
-        setError('JSON must contain a "vehicle" object with a "name" field.');
+      // Find the vehicle-data JSON file
+      let vehicleJson: VehicleJsonData | null = null;
+      for (const [path, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        if (path.includes('vehicle-data/') && path.endsWith('.json')) {
+          const text = await entry.async('string');
+          vehicleJson = JSON.parse(text) as VehicleJsonData;
+          break;
+        }
+      }
+
+      if (!vehicleJson?.vehicle?.name) {
+        setError('Could not find vehicle data in this ZIP. Make sure it\'s a TCS vehicle export.');
         return;
       }
 
-      setJsonData(data);
+      // Build file maps from ZIP
+      const photos: ZipFileEntry[] = [];
+      const documents: ZipFileEntry[] = [];
+      const receipts: ZipFileEntry[] = [];
+
+      for (const [path, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        const parts = path.split('/');
+
+        // Find type folder index (images, documents, receipts)
+        const imgIdx = parts.indexOf('images');
+        const docIdx = parts.indexOf('documents');
+        const recIdx = parts.indexOf('receipts');
+
+        if (imgIdx >= 0 && parts.length > imgIdx + 2) {
+          const fileName = parts.slice(imgIdx + 2).join('/');
+          photos.push({ name: fileName, entry });
+        } else if (docIdx >= 0 && parts.length > docIdx + 2) {
+          const fileName = parts.slice(docIdx + 2).join('/');
+          documents.push({ name: fileName, entry });
+        } else if (recIdx >= 0 && parts.length > recIdx + 2) {
+          const fileName = parts.slice(recIdx + 2).join('/');
+          receipts.push({ name: fileName, entry });
+        }
+      }
+
+      setJsonData(vehicleJson);
+      setZipFiles({ photos, documents, receipts });
     } catch {
-      setError('Could not parse JSON file. Please check the format.');
+      setError('Could not read this ZIP file. Make sure it\'s a valid TCS vehicle export.');
     }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'application/json': ['.json'],
+      'application/zip': ['.zip'],
+      'application/x-zip-compressed': ['.zip'],
     },
     maxFiles: 1,
   });
@@ -126,6 +190,7 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
     if (!jsonData) return;
     setImporting(true);
     setError(null);
+    setImportProgress('Creating vehicle...');
 
     try {
       const v = jsonData.vehicle;
@@ -166,13 +231,72 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
 
       const vehicleId = vehicleData.id;
 
+      // Upload photos
+      if (zipFiles.photos.length > 0) {
+        setImportProgress(`Uploading ${zipFiles.photos.length} photos...`);
+
+        // Determine showcase index from JSON data
+        const showcaseIdx = jsonData.photos?.findIndex(p => p.is_showcase) ?? 0;
+
+        for (let i = 0; i < zipFiles.photos.length; i++) {
+          const photo = zipFiles.photos[i];
+          try {
+            const blob = await photo.entry.async('blob');
+            const timestamp = Date.now();
+            const random = Math.random().toString(36).substring(2, 8);
+            const ext = photo.name.split('.').pop() || 'jpg';
+            const storagePath = `${vehicleId}/${timestamp}-${random}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('motorcycle-photos')
+              .upload(storagePath, blob);
+
+            if (!uploadError) {
+              await supabase.from('photos').insert({
+                motorcycle_id: vehicleId,
+                storage_path: storagePath,
+                display_order: i,
+                is_showcase: i === (showcaseIdx >= 0 ? showcaseIdx : 0),
+              });
+            }
+          } catch {
+            // Skip failed photo
+          }
+        }
+      }
+
       // Import documents
       if (jsonData.documents && jsonData.documents.length > 0) {
+        setImportProgress(`Importing ${jsonData.documents.length} documents...`);
         for (const doc of jsonData.documents) {
           const docType = VALID_DOC_TYPES.includes(doc.document_type as DocumentType)
             ? doc.document_type as DocumentType
             : 'other';
           const expDate = doc.expiration_date ? formatDateForDB(parseFlexibleDate(doc.expiration_date)) : null;
+
+          let storagePath = '';
+
+          // Try to find matching file in ZIP
+          if (doc.file_name) {
+            const fileEntry = zipFiles.documents.find(f => f.name === doc.file_name);
+            if (fileEntry) {
+              try {
+                const blob = await fileEntry.entry.async('blob');
+                const timestamp = Date.now();
+                const random = Math.random().toString(36).substring(2, 8);
+                const ext = doc.file_name.split('.').pop() || 'bin';
+                storagePath = `${vehicleId}/${timestamp}-${random}.${ext}`;
+
+                const { error: uploadError } = await supabase.storage
+                  .from('vehicle-documents')
+                  .upload(storagePath, blob);
+
+                if (uploadError) storagePath = '';
+              } catch {
+                storagePath = '';
+              }
+            }
+          }
 
           await supabase.from('vehicle_documents').insert({
             motorcycle_id: vehicleId,
@@ -182,13 +306,14 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             notes: doc.notes || null,
             file_name: doc.file_name || 'imported-document',
             file_type: doc.file_type || null,
-            storage_path: '',
+            storage_path: storagePath,
           });
         }
       }
 
-      // Import service records
+      // Import service records + receipts
       if (jsonData.service_records && jsonData.service_records.length > 0) {
+        setImportProgress(`Importing ${jsonData.service_records.length} service records...`);
         for (const sr of jsonData.service_records) {
           const category = VALID_SERVICE_CATEGORIES.includes(sr.category as ServiceCategory)
             ? sr.category as ServiceCategory
@@ -197,7 +322,7 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             ? formatDateForDB(parseFlexibleDate(sr.service_date)) || new Date().toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0];
 
-          await supabase.from('service_records').insert({
+          const { data: srData } = await supabase.from('service_records').insert({
             motorcycle_id: vehicleId,
             service_date: serviceDate,
             title: sr.title,
@@ -206,12 +331,44 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             odometer: sr.odometer || null,
             shop_name: sr.shop_name || null,
             category,
-          });
+          }).select('id').single();
+
+          // Upload receipts for this service record
+          if (srData && sr.receipts && sr.receipts.length > 0) {
+            for (const receipt of sr.receipts) {
+              const fileEntry = zipFiles.receipts.find(f => f.name === receipt.file_name);
+              if (!fileEntry) continue;
+
+              try {
+                const blob = await fileEntry.entry.async('blob');
+                const timestamp = Date.now();
+                const random = Math.random().toString(36).substring(2, 8);
+                const ext = receipt.file_name.split('.').pop() || 'bin';
+                const storagePath = `${srData.id}/${timestamp}-${random}.${ext}`;
+
+                const { error: uploadError } = await supabase.storage
+                  .from('service-receipts')
+                  .upload(storagePath, blob);
+
+                if (!uploadError) {
+                  await supabase.from('service_record_receipts').insert({
+                    service_record_id: srData.id,
+                    file_name: receipt.file_name,
+                    file_type: receipt.file_type || null,
+                    storage_path: storagePath,
+                  });
+                }
+              } catch {
+                // Skip failed receipt
+              }
+            }
+          }
         }
       }
 
       // Import mileage history
       if (jsonData.mileage_history && jsonData.mileage_history.length > 0) {
+        setImportProgress('Importing mileage history...');
         for (const m of jsonData.mileage_history) {
           const recordedDate = m.recorded_date
             ? formatDateForDB(parseFlexibleDate(m.recorded_date)) || new Date().toISOString().split('T')[0]
@@ -228,6 +385,7 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
 
       // Import value history
       if (jsonData.value_history && jsonData.value_history.length > 0) {
+        setImportProgress('Importing value history...');
         for (const vh of jsonData.value_history) {
           const recordedDate = vh.recorded_date
             ? formatDateForDB(parseFlexibleDate(vh.recorded_date)) || new Date().toISOString().split('T')[0]
@@ -244,13 +402,13 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
       }
 
       setDone(true);
-      // Redirect to the new vehicle
       router.push(`/vehicles/${vehicleId}`);
     } catch (err) {
-      console.error('JSON import error:', err);
+      console.error('ZIP import error:', err);
       setError('Import failed unexpectedly. Please try again.');
     } finally {
       setImporting(false);
+      setImportProgress('');
     }
   };
 
@@ -265,10 +423,13 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
 
   if (jsonData) {
     const v = jsonData.vehicle;
+    const photoCt = zipFiles.photos.length;
     const serviceCt = jsonData.service_records?.length || 0;
     const docCt = jsonData.documents?.length || 0;
     const mileageCt = jsonData.mileage_history?.length || 0;
     const valueCt = jsonData.value_history?.length || 0;
+    const receiptCt = zipFiles.receipts.length;
+    const docFileCt = zipFiles.documents.length;
 
     return (
       <div className="space-y-4">
@@ -281,8 +442,10 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             {v.vehicle_type && v.vehicle_type !== 'motorcycle' && (
               <p className="capitalize">{v.vehicle_type}</p>
             )}
+            {photoCt > 0 && <p>{photoCt} photo{photoCt !== 1 ? 's' : ''}</p>}
             {serviceCt > 0 && <p>{serviceCt} service record{serviceCt !== 1 ? 's' : ''}</p>}
-            {docCt > 0 && <p>{docCt} document{docCt !== 1 ? 's' : ''}</p>}
+            {docCt > 0 && <p>{docCt} document{docCt !== 1 ? 's' : ''}{docFileCt > 0 ? ` (${docFileCt} file${docFileCt !== 1 ? 's' : ''})` : ''}</p>}
+            {receiptCt > 0 && <p>{receiptCt} receipt file{receiptCt !== 1 ? 's' : ''}</p>}
             {mileageCt > 0 && <p>{mileageCt} mileage entr{mileageCt !== 1 ? 'ies' : 'y'}</p>}
             {valueCt > 0 && <p>{valueCt} value history entr{valueCt !== 1 ? 'ies' : 'y'}</p>}
           </div>
@@ -309,6 +472,10 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
           <p className="text-sm text-destructive">{error}</p>
         )}
 
+        {importing && importProgress && (
+          <p className="text-sm text-muted-foreground">{importProgress}</p>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={handleImport}
@@ -318,7 +485,7 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             {importing ? 'Importing...' : 'Import Vehicle'}
           </button>
           <button
-            onClick={() => { setJsonData(null); setError(null); }}
+            onClick={() => { setJsonData(null); setError(null); setZipFiles({ photos: [], documents: [], receipts: [] }); zipRef.current = null; }}
             disabled={importing}
             className="py-3 px-6 border border-border hover:bg-muted"
           >
@@ -340,12 +507,12 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
         }`}
       >
         <input {...getInputProps()} />
-        <DocumentArrowUpIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+        <ArchiveBoxIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
         <p className="text-sm font-medium text-foreground">
-          {isDragActive ? 'Drop JSON here...' : 'Drop a vehicle JSON file'}
+          {isDragActive ? 'Drop ZIP here...' : 'Drop a TCS vehicle ZIP file here'}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          From a single vehicle backup export
+          From a single vehicle export
         </p>
       </div>
       {error && (
