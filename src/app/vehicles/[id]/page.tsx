@@ -1,15 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
-import { PhotoGallery } from '@/components/photos/PhotoGallery';
-import { formatSaleInfo } from '@/lib/statusParser';
-import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, ServiceRecord, ServiceRecordReceipt, VehicleDocument, CollectionRole } from '@/types/database';
-import { VehicleStatus } from '@/components/vehicles/VehicleStatus';
-import { MileageSection } from '@/components/vehicles/MileageSection';
-import { ServiceRecordsSection } from '@/components/vehicles/ServiceRecordsSection';
-import { DocumentsSection } from '@/components/vehicles/DocumentsSection';
-import Link from 'next/link';
+import { Motorcycle, Photo, MileageHistory, ServiceRecord, ServiceRecordReceipt, VehicleDocument, CollectionRole } from '@/types/database';
+import { VehicleDetailContent } from '@/components/vehicles/VehicleDetailContent';
 import { notFound } from 'next/navigation';
-import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 async function getUserRoleForCollection(supabase: Awaited<ReturnType<typeof createClient>>, collectionId: string, userId: string): Promise<CollectionRole | null> {
   // Check if user is owner
@@ -31,15 +24,6 @@ async function getUserRoleForCollection(supabase: Awaited<ReturnType<typeof crea
 
   return (membership?.role as CollectionRole) || null;
 }
-
-const vehicleTypeLabels: Record<VehicleType, string> = {
-  motorcycle: 'Motorcycle',
-  car: 'Car',
-  boat: 'Boat',
-  trailer: 'Trailer',
-  other: 'Other',
-};
-
 
 interface VehicleDetailPageProps {
   params: Promise<{ id: string }>;
@@ -155,110 +139,17 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeftIcon className="w-5 h-5" />
-            <span>Back</span>
-          </Link>
-          {canEdit && (
-            <Link
-              href={`/vehicles/${id}/edit`}
-              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:opacity-90"
-            >
-              <PencilIcon className="w-4 h-4" />
-              <span>Edit</span>
-            </Link>
-          )}
-        </div>
-
-        {/* Photo Gallery */}
-        <PhotoGallery photos={photos} motorcycleName={vehicle.name} imageUrls={imageUrls} />
-
-        {/* Vehicle Details */}
-        <div className="px-4 py-6 space-y-6">
-          {/* Title */}
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-foreground">{vehicle.name}</h1>
-              <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground">
-                {vehicleTypeLabels[vehicle.vehicle_type || 'motorcycle']}
-              </span>
-            </div>
-            {vehicle.nickname && (
-              <p className="text-lg text-muted-foreground italic">&ldquo;{vehicle.nickname}&rdquo;</p>
-            )}
-            <div className="flex items-center gap-2 text-lg text-muted-foreground mt-1">
-              {vehicle.make && <span>{vehicle.make}</span>}
-              {vehicle.model && (
-                <>
-                  {vehicle.make && <span>·</span>}
-                  <span>{vehicle.model}</span>
-                </>
-              )}
-              {vehicle.year && (
-                <>
-                  {(vehicle.make || vehicle.model) && <span>·</span>}
-                  <span>{vehicle.year}</span>
-                </>
-              )}
-            </div>
-
-            {/* Sale Info */}
-            {vehicle.sale_info && (
-              <p className="mt-2 text-muted-foreground">
-                {formatSaleInfo(vehicle.sale_info as SaleInfo)}
-              </p>
-            )}
-          </div>
-
-          {/* Vehicle Status Section - prominent, editable */}
-          <VehicleStatus vehicle={vehicle} canEdit={canEdit} />
-
-          {/* Key Information */}
-          <div className="grid gap-4">
-            {/* Plate Number & VIN - side by side on larger screens */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Plate Number */}
-              <div className="bg-card border border-border p-4">
-                <h2 className="text-sm font-medium text-muted-foreground mb-1">Plate Number</h2>
-                <p className="text-2xl font-mono font-bold tracking-wider">
-                  {vehicle.plate_number || '—'}
-                </p>
-              </div>
-
-              {/* VIN */}
-              <div className="bg-card border border-border p-4 min-w-0">
-                <h2 className="text-sm font-medium text-muted-foreground mb-1">VIN</h2>
-                <p className="text-lg font-mono tracking-wide break-all overflow-hidden">
-                  {vehicle.vin || '—'}
-                </p>
-              </div>
-            </div>
-
-            {/* Mileage - with update button */}
-            <MileageSection motorcycleId={vehicle.id} mileageHistory={mileageHistory} canEdit={canEdit} />
-
-            {/* Service History */}
-            <ServiceRecordsSection motorcycleId={vehicle.id} serviceRecords={serviceRecords} canEdit={canEdit} initialReceiptUrls={receiptUrls} />
-
-            {/* Documents */}
-            <DocumentsSection motorcycleId={vehicle.id} documents={documents} canEdit={canEdit} initialUrls={documentUrls} />
-
-            {/* Notes */}
-            {vehicle.notes && (
-              <div className="bg-card border border-border p-4">
-                <h2 className="text-sm font-medium text-muted-foreground mb-1">Notes</h2>
-                <p className="text-foreground whitespace-pre-wrap">{vehicle.notes}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <VehicleDetailContent
+        vehicle={vehicle}
+        photos={photos}
+        mileageHistory={mileageHistory}
+        serviceRecords={serviceRecords}
+        documents={documents}
+        imageUrls={imageUrls}
+        documentUrls={documentUrls}
+        receiptUrls={receiptUrls}
+        canEdit={canEdit}
+      />
     </AppShell>
   );
 }

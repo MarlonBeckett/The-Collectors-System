@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Motorcycle } from '@/types/database';
 import { VehicleList } from './VehicleList';
 import { CollectionSwitcher, CollectionOption } from './CollectionSwitcher';
 import UpgradeBanner from '@/components/subscription/UpgradeBanner';
+import { useImagePreloader } from '@/hooks/useImagePreloader';
+import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton';
 
 interface UserCollection {
   id: string;
@@ -35,6 +37,13 @@ const STORAGE_KEY = 'selectedCollectionId';
 export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subscriptionInfo }: DashboardContentProps) {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Preload first 5 showcase photos
+  const imageUrls = useMemo(
+    () => Object.values(vehiclePhotoMap).slice(0, 5),
+    [vehiclePhotoMap]
+  );
+  const { ready: imagesReady } = useImagePreloader(imageUrls);
 
   // Load selected collection from localStorage on mount
   useEffect(() => {
@@ -68,20 +77,13 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
     is_owner: c.is_owner,
   }));
 
-  // Don't render until we've loaded from localStorage to prevent flash
-  if (!isLoaded) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="mb-6">
-          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-          <div className="h-4 w-64 bg-muted animate-pulse rounded mt-2" />
-        </div>
-      </div>
-    );
+  // Show skeleton until localStorage loaded AND images preloaded
+  if (!isLoaded || !imagesReady) {
+    return <DashboardSkeleton />;
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 animate-fade-in">
       <div className="mb-6">
         <CollectionSwitcher
           collections={collectionOptions}

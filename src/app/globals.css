@@ -24,6 +24,8 @@
   --font-sans: "Oxanium", sans-serif;
   --font-mono: "Source Code Pro", monospace;
   --radius: 0px;
+  --skeleton-base: #a3a3a3;
+  --skeleton-highlight: #bfbfbf;
 }
 
 .dark {
@@ -46,6 +48,8 @@
   --border: #4a4a4a;
   --input: #4a4a4a;
   --ring: #e53935;
+  --skeleton-base: #2a2a2a;
+  --skeleton-highlight: #3a3a3a;
 }
 
 @theme inline {
@@ -133,4 +137,26 @@ body {
   100% {
     stroke-dashoffset: 6.28;
   }
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Fade-in for content reveal after skeleton */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
 }

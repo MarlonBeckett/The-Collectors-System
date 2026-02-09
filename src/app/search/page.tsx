@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
 import { AppShell } from '@/components/layout/AppShell';
 import { VehicleCard } from '@/components/dashboard/VehicleCard';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 export default function SearchPage() {
@@ -66,8 +67,14 @@ export default function SearchPage() {
         {/* Results */}
         <div className="mt-4">
           {loading ? (
-            <div className="text-center py-12">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent animate-spin mx-auto" />
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="border border-border bg-card p-4">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-28 mt-2" />
+                  <Skeleton className="h-3 w-20 mt-2" />
+                </div>
+              ))}
             </div>
           ) : query.trim() === '' ? (
             <div className="text-center py-12 text-muted-foreground">
