@@ -11,7 +11,10 @@ export function useImagePreloader(
   urls: string[],
   { timeout = 4000, skip = false }: UseImagePreloaderOptions = {}
 ): { ready: boolean } {
-  const [ready, setReady] = useState(skip || urls.length === 0);
+  // Stable string key so effect doesn't re-run when array ref changes
+  const key = urls.join('\n');
+
+  const [ready, setReady] = useState(() => skip || urls.length === 0);
 
   useEffect(() => {
     if (skip || urls.length === 0) {
@@ -23,24 +26,24 @@ export function useImagePreloader(
     let loaded = 0;
     const total = urls.length;
 
+    const done = () => {
+      if (!cancelled) setReady(true);
+    };
+
     const check = () => {
       loaded++;
-      if (!cancelled && loaded >= total) {
-        setReady(true);
-      }
+      if (loaded >= total) done();
     };
 
     const images = urls.map((url) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = check;
       img.onerror = check;
       img.src = url;
       return img;
     });
 
-    const timer = setTimeout(() => {
-      if (!cancelled) setReady(true);
-    }, timeout);
+    const timer = setTimeout(done, timeout);
 
     return () => {
       cancelled = true;
@@ -50,7 +53,8 @@ export function useImagePreloader(
         img.onerror = null;
       });
     };
-  }, [urls, timeout, skip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, skip, timeout]);
 
   return { ready };
 }

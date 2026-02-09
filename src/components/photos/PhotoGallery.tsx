@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Photo } from '@/types/database';
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -9,11 +9,69 @@ interface PhotoGalleryProps {
   photos: Photo[];
   motorcycleName: string;
   imageUrls: Record<string, string>;
+  onFirstImageLoad?: () => void;
 }
 
-export function PhotoGallery({ photos, motorcycleName, imageUrls }: PhotoGalleryProps) {
+// Schedule work during idle time, with fallback for Safari
+const scheduleIdle = typeof requestIdleCallback === 'function'
+  ? requestIdleCallback
+  : (cb: () => void) => setTimeout(cb, 16);
+const cancelIdle = typeof cancelIdleCallback === 'function'
+  ? cancelIdleCallback
+  : (id: number) => clearTimeout(id);
+
+export function PhotoGallery({ photos, motorcycleName, imageUrls, onFirstImageLoad }: PhotoGalleryProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mainImageLoaded, setMainImageLoaded] = useState(false);
+  const firstLoadFired = useRef(false);
+  const thumbContainerRef = useRef<HTMLDivElement>(null);
+
+  // After main image loads, inject thumbnail background-images directly into
+  // the DOM one at a time during idle frames. This bypasses React entirely —
+  // no state updates, no reconciliation, no layout thrashing from new <img> nodes.
+  // CSS background-image is GPU-composited and doesn't cause reflow.
+  useEffect(() => {
+    if (!mainImageLoaded) return;
+    const container = thumbContainerRef.current;
+    if (!container) return;
+
+    const buttons = container.querySelectorAll<HTMLButtonElement>('[data-thumb-url]');
+    if (buttons.length === 0) return;
+
+    let cancelled = false;
+    let i = 0;
+    let idleId: number;
+
+    const revealNext = () => {
+      if (cancelled || i >= buttons.length) return;
+      const btn = buttons[i];
+      const url = btn.dataset.thumbUrl;
+      if (url) {
+        const shimmer = btn.querySelector<HTMLDivElement>('.skeleton-shimmer');
+        // Set background image on the button itself (it's already position:relative)
+        btn.style.backgroundImage = `url("${url}")`;
+        btn.style.backgroundSize = 'cover';
+        btn.style.backgroundPosition = 'center';
+        if (shimmer) shimmer.style.display = 'none';
+      }
+      i++;
+      if (i < buttons.length) {
+        idleId = scheduleIdle(revealNext) as unknown as number;
+      }
+    };
+
+    // Small delay so the main image paint settles first
+    const timer = setTimeout(() => {
+      idleId = scheduleIdle(revealNext) as unknown as number;
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      cancelIdle(idleId);
+    };
+  }, [mainImageLoaded, photos, imageUrls]);
 
   if (photos.length === 0) {
     return (
@@ -90,6 +148,14 @@ export function PhotoGallery({ photos, motorcycleName, imageUrls }: PhotoGallery
             className="object-contain"
             sizes="(max-width: 768px) 100vw, 800px"
             unoptimized
+            priority
+            onLoad={() => {
+              if (!firstLoadFired.current) {
+                firstLoadFired.current = true;
+                setMainImageLoaded(true);
+                onFirstImageLoad?.();
+              }
+            }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -123,29 +189,19 @@ export function PhotoGallery({ photos, motorcycleName, imageUrls }: PhotoGallery
         </div>
       </div>
 
-      {/* Thumbnail Strip */}
+      {/* Thumbnail Strip — images injected via DOM in idle frames, not React */}
       {sortedPhotos.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto p-2 bg-card">
+        <div ref={thumbContainerRef} className="flex gap-2 overflow-x-auto p-2 bg-card">
           {sortedPhotos.map((photo, index) => (
             <button
               key={photo.id}
               onClick={() => setCurrentIndex(index)}
-              className={`relative w-16 h-16 flex-shrink-0 ${
+              data-thumb-url={imageUrls[photo.id] || ''}
+              className={`relative w-16 h-16 flex-shrink-0 overflow-hidden ${
                 index === currentIndex ? 'ring-2 ring-primary' : ''
               }`}
             >
-              {imageUrls[photo.id] ? (
-                <Image
-                  src={imageUrls[photo.id]}
-                  alt={`Thumbnail ${index + 1}`}
-                  fill
-                  className="object-cover"
-                  sizes="64px"
-                  unoptimized
-                />
-              ) : (
-                <div className="w-full h-full bg-muted animate-pulse" />
-              )}
+              <div className="w-full h-full skeleton-shimmer" />
             </button>
           ))}
         </div>

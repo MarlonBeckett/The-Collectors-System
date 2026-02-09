@@ -39,11 +39,11 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Preload first 5 showcase photos
-  const imageUrls = useMemo(
+  const preloadUrls = useMemo(
     () => Object.values(vehiclePhotoMap).slice(0, 5),
     [vehiclePhotoMap]
   );
-  const { ready: imagesReady } = useImagePreloader(imageUrls);
+  const { ready: imagesReady } = useImagePreloader(preloadUrls);
 
   // Load selected collection from localStorage on mount
   useEffect(() => {
@@ -51,24 +51,20 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
     if (stored && collections.some((c) => c.id === stored)) {
       setSelectedCollectionId(stored);
     } else if (collections.length > 0) {
-      // Default to first collection (owned collections come first)
       setSelectedCollectionId(collections[0].id);
     }
     setIsLoaded(true);
   }, [collections]);
 
-  // Save selected collection to localStorage
   const handleSelectCollection = (collectionId: string) => {
     setSelectedCollectionId(collectionId);
     localStorage.setItem(STORAGE_KEY, collectionId);
   };
 
-  // Filter vehicles by selected collection
   const filteredVehicles = selectedCollectionId
     ? vehicles.filter((v) => v.collection_id === selectedCollectionId)
     : vehicles;
 
-  // Convert to CollectionOption format
   const collectionOptions: CollectionOption[] = collections.map((c) => ({
     id: c.id,
     name: c.name,
@@ -77,7 +73,6 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
     is_owner: c.is_owner,
   }));
 
-  // Show skeleton until localStorage loaded AND images preloaded
   if (!isLoaded || !imagesReady) {
     return <DashboardSkeleton />;
   }

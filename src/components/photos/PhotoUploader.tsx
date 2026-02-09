@@ -1,12 +1,19 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { createClient } from '@/lib/supabase/client';
 import { Photo } from '@/types/database';
-import Image from 'next/image';
 import { CloudArrowUpIcon, XMarkIcon, ArrowsUpDownIcon, StarIcon as StarOutline } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
+
+// Schedule work during idle time, with fallback for Safari
+const scheduleIdle = typeof requestIdleCallback === 'function'
+  ? requestIdleCallback
+  : (cb: () => void) => setTimeout(cb, 16);
+const cancelIdle = typeof cancelIdleCallback === 'function'
+  ? cancelIdleCallback
+  : (id: number) => clearTimeout(id);
 
 interface PhotoUploaderProps {
   motorcycleId: string;
@@ -23,7 +30,46 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
   const [isReordering, setIsReordering] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+
+  // Inject background-images via DOM during idle frames — bypasses React
+  // reconciliation to avoid layout thrashing from <Image> components.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const cells = grid.querySelectorAll<HTMLDivElement>('[data-photo-url]');
+    if (cells.length === 0) return;
+
+    let cancelled = false;
+    let i = 0;
+    let idleId: number;
+
+    const revealNext = () => {
+      if (cancelled || i >= cells.length) return;
+      const cell = cells[i];
+      const url = cell.dataset.photoUrl;
+      if (url && !cell.style.backgroundImage) {
+        cell.style.backgroundImage = `url("${url}")`;
+        cell.style.backgroundSize = 'cover';
+        cell.style.backgroundPosition = 'center';
+        const shimmer = cell.querySelector<HTMLDivElement>('.skeleton-shimmer');
+        if (shimmer) shimmer.style.display = 'none';
+      }
+      i++;
+      if (i < cells.length) {
+        idleId = scheduleIdle(revealNext) as unknown as number;
+      }
+    };
+
+    idleId = scheduleIdle(revealNext) as unknown as number;
+
+    return () => {
+      cancelled = true;
+      cancelIdle(idleId);
+    };
+  }, [photos, imageUrls]);
 
   // Load existing photos
   useEffect(() => {
@@ -302,24 +348,14 @@ export function PhotoUploader({ motorcycleId }: PhotoUploaderProps) {
             </p>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
+          <div ref={gridRef} className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <div
                 key={photo.id}
-                className="relative aspect-square bg-muted group"
+                data-photo-url={imageUrls[photo.id] || ''}
+                className="relative aspect-square bg-muted group overflow-hidden"
               >
-                {imageUrls[photo.id] ? (
-                  <Image
-                    src={imageUrls[photo.id]}
-                    alt={`Photo ${index + 1}`}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 33vw, 200px"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-full h-full animate-pulse" />
-                )}
+                <div className="w-full h-full skeleton-shimmer" />
 
                 {/* Delete Button */}
                 <button

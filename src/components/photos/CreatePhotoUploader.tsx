@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { CloudArrowUpIcon, XMarkIcon, ArrowsUpDownIcon, StarIcon as StarOutline } from '@heroicons/react/24/outline';
 import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
+
+// Schedule work during idle time, with fallback for Safari
+const scheduleIdle = typeof requestIdleCallback === 'function'
+  ? requestIdleCallback
+  : (cb: () => void) => setTimeout(cb, 16);
+const cancelIdle = typeof cancelIdleCallback === 'function'
+  ? cancelIdleCallback
+  : (id: number) => clearTimeout(id);
 
 export interface StagedPhoto {
   file: File;
@@ -18,6 +26,44 @@ interface CreatePhotoUploaderProps {
 export function CreatePhotoUploader({ onPhotosChange }: CreatePhotoUploaderProps) {
   const [photos, setPhotos] = useState<StagedPhoto[]>([]);
   const [isReordering, setIsReordering] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Inject background-images via DOM during idle frames
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const cells = grid.querySelectorAll<HTMLDivElement>('[data-photo-url]');
+    if (cells.length === 0) return;
+
+    let cancelled = false;
+    let i = 0;
+    let idleId: number;
+
+    const revealNext = () => {
+      if (cancelled || i >= cells.length) return;
+      const cell = cells[i];
+      const url = cell.dataset.photoUrl;
+      if (url && !cell.style.backgroundImage) {
+        cell.style.backgroundImage = `url("${url}")`;
+        cell.style.backgroundSize = 'cover';
+        cell.style.backgroundPosition = 'center';
+        const shimmer = cell.querySelector<HTMLDivElement>('.skeleton-shimmer');
+        if (shimmer) shimmer.style.display = 'none';
+      }
+      i++;
+      if (i < cells.length) {
+        idleId = scheduleIdle(revealNext) as unknown as number;
+      }
+    };
+
+    idleId = scheduleIdle(revealNext) as unknown as number;
+
+    return () => {
+      cancelled = true;
+      cancelIdle(idleId);
+    };
+  }, [photos]);
 
   // Sync to parent whenever photos change
   useEffect(() => {
@@ -126,18 +172,14 @@ export function CreatePhotoUploader({ onPhotosChange }: CreatePhotoUploaderProps
             </p>
           )}
 
-          <div className="grid grid-cols-3 gap-2">
+          <div ref={gridRef} className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <div
                 key={photo.previewUrl}
-                className="relative aspect-square bg-muted group"
+                data-photo-url={photo.previewUrl}
+                className="relative aspect-square bg-muted group overflow-hidden"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photo.previewUrl}
-                  alt={`Staged photo ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
+                <div className="w-full h-full skeleton-shimmer" />
 
                 {/* Delete Button */}
                 <button
