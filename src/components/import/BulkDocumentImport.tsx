@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Motorcycle } from '@/types/database';
+import { Motorcycle, VehicleDocument } from '@/types/database';
+import { matchFileToRecord } from '@/lib/importFileMatcher';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 interface UserCollection {
@@ -11,17 +12,24 @@ interface UserCollection {
   is_owner: boolean;
 }
 
-interface BulkPhotoImportProps {
+interface BulkDocumentImportProps {
   collections: UserCollection[];
   onImportingChange?: (importing: boolean) => void;
 }
 
+interface FileMatch {
+  file: File;
+  matchedRecord: VehicleDocument | null;
+  confidence: number;
+}
+
 interface FolderMatch {
   folderName: string;
-  files: File[];
-  matchedBike: Motorcycle | null;
-  confidence: number;
+  files: FileMatch[];
+  matchedVehicle: Motorcycle | null;
+  vehicleConfidence: number;
   manualOverride: string | null;
+  documents: VehicleDocument[];
 }
 
 interface UploadProgress {
@@ -29,25 +37,37 @@ interface UploadProgress {
   total: number;
   completed: number;
   failed: number;
+  skipped: number;
   status: 'pending' | 'uploading' | 'done' | 'error';
 }
 
-export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImportProps) {
-  const [bikes, setBikes] = useState<Motorcycle[]>([]);
+const ACCEPTED_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+  'application/pdf',
+];
+
+function isAcceptedFile(file: File): boolean {
+  if (ACCEPTED_TYPES.includes(file.type)) return true;
+  // Fallback: check extension for files with missing MIME types
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  return ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf'].includes(ext || '');
+}
+
+export function BulkDocumentImport({ collections, onImportingChange }: BulkDocumentImportProps) {
+  const [vehicles, setVehicles] = useState<Motorcycle[]>([]);
   const [matches, setMatches] = useState<FolderMatch[]>([]);
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
   const [step, setStep] = useState<'select' | 'match' | 'uploading' | 'done'>('select');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Default to first owned collection, or first collection if none owned
   const defaultCollection = collections.find(c => c.is_owner) || collections[0];
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
 
   const supabase = createClient();
 
   useEffect(() => {
-    const loadBikes = async () => {
+    const loadVehicles = async () => {
       if (!selectedCollectionId) return;
 
       const { data } = await supabase
@@ -55,24 +75,23 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
         .select('*')
         .eq('collection_id', selectedCollectionId)
         .order('name');
-      if (data) setBikes(data);
+      if (data) setVehicles(data);
     };
-    loadBikes();
+    loadVehicles();
   }, [supabase, selectedCollectionId]);
 
-  const fuzzyMatch = (folderName: string, bikeName: string): number => {
+  const fuzzyMatch = (folderName: string, vehicleName: string): number => {
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
     const folder = normalize(folderName);
-    const bike = normalize(bikeName);
+    const vehicle = normalize(vehicleName);
 
-    if (folder === bike) return 100;
-    if (folder.includes(bike) || bike.includes(folder)) return 85;
+    if (folder === vehicle) return 100;
+    if (folder.includes(vehicle) || vehicle.includes(folder)) return 85;
 
-    // Check word overlap
     const folderWords = new Set(folderName.toLowerCase().split(/\s+/));
-    const bikeWords = new Set(bikeName.toLowerCase().split(/\s+/));
-    const overlap = [...folderWords].filter((w) => bikeWords.has(w)).length;
-    const totalWords = Math.max(folderWords.size, bikeWords.size);
+    const vehicleWords = new Set(vehicleName.toLowerCase().split(/\s+/));
+    const overlap = [...folderWords].filter((w) => vehicleWords.has(w)).length;
+    const totalWords = Math.max(folderWords.size, vehicleWords.size);
 
     if (overlap > 0) {
       return Math.round((overlap / totalWords) * 70) + 15;
@@ -81,31 +100,44 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
     return 0;
   };
 
-  const processFiles = useCallback((files: FileList | File[]) => {
+  const loadDocumentsForVehicle = useCallback(async (vehicleId: string): Promise<VehicleDocument[]> => {
+    const { data } = await supabase
+      .from('vehicle_documents')
+      .select('*')
+      .eq('motorcycle_id', vehicleId)
+      .order('title');
+    return data || [];
+  }, [supabase]);
+
+  const matchFilesToDocuments = (files: File[], documents: VehicleDocument[]): FileMatch[] => {
+    const titles = documents.map(d => d.title);
+    return files.map(file => {
+      const match = matchFileToRecord(file.name, titles);
+      return {
+        file,
+        matchedRecord: match ? documents[match.index] : null,
+        confidence: match?.confidence || 0,
+      };
+    });
+  };
+
+  const processFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     const folderMap: Record<string, File[]> = {};
 
     for (const file of fileArray) {
-      // Check if it's an image
-      if (!file.type.startsWith('image/')) continue;
+      if (!isAcceptedFile(file)) continue;
 
-      // Get the relative path (webkitRelativePath includes folder structure)
       const relativePath = file.webkitRelativePath || file.name;
       const pathParts = relativePath.split('/').filter(p => p);
 
-      // Skip hidden files and __MACOSX
       if (relativePath.includes('__MACOSX') || relativePath.includes('/._')) continue;
       if (file.name.startsWith('.')) continue;
 
-      // Determine folder name
-      // Structure: RootFolder/VehicleFolder/image.jpg
       let folderName: string;
       if (pathParts.length >= 2) {
-        // Use the second-to-last folder (vehicle folder)
-        // e.g., "Motorcycles/Honda CBR 650 F/IMG_001.jpg" -> "Honda CBR 650 F"
         folderName = pathParts[pathParts.length - 2];
       } else {
-        // No folder structure, skip
         continue;
       }
 
@@ -115,44 +147,53 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
       folderMap[folderName].push(file);
     }
 
-    // Create folder matches
     const folderMatches: FolderMatch[] = [];
 
-    for (const [folderName, files] of Object.entries(folderMap)) {
-      if (files.length === 0) continue;
+    for (const [folderName, folderFiles] of Object.entries(folderMap)) {
+      if (folderFiles.length === 0) continue;
 
-      // Find best matching bike
       let bestMatch: Motorcycle | null = null;
       let bestConfidence = 0;
 
-      for (const bike of bikes) {
-        const confidence = fuzzyMatch(folderName, bike.name);
+      for (const vehicle of vehicles) {
+        const confidence = fuzzyMatch(folderName, vehicle.name);
         if (confidence > bestConfidence) {
           bestConfidence = confidence;
-          bestMatch = bike;
+          bestMatch = vehicle;
         }
+      }
+
+      const matchedVehicle = bestConfidence >= 50 ? bestMatch : null;
+      let documents: VehicleDocument[] = [];
+      let fileMatches: FileMatch[];
+
+      if (matchedVehicle) {
+        documents = await loadDocumentsForVehicle(matchedVehicle.id);
+        fileMatches = matchFilesToDocuments(folderFiles, documents);
+      } else {
+        fileMatches = folderFiles.map(f => ({ file: f, matchedRecord: null, confidence: 0 }));
       }
 
       folderMatches.push({
         folderName,
-        files,
-        matchedBike: bestConfidence >= 50 ? bestMatch : null,
-        confidence: bestConfidence,
+        files: fileMatches,
+        matchedVehicle,
+        vehicleConfidence: bestConfidence,
         manualOverride: null,
+        documents,
       });
     }
 
-    // Sort by folder name
     folderMatches.sort((a, b) => a.folderName.localeCompare(b.folderName));
 
     if (folderMatches.length === 0) {
-      alert('No image folders found. Make sure your folder contains subfolders with images.');
+      alert('No document folders found. Make sure your folder contains subfolders with document files (images or PDFs).');
       return;
     }
 
     setMatches(folderMatches);
     setStep('match');
-  }, [bikes]);
+  }, [vehicles, loadDocumentsForVehicle]);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -167,7 +208,6 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
     const items = e.dataTransfer.items;
     if (!items) return;
 
-    // Collect all files from the drop
     const allFiles: File[] = [];
     const promises: Promise<void>[] = [];
 
@@ -176,7 +216,6 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
         const fileEntry = entry as FileSystemFileEntry;
         return new Promise((resolve) => {
           fileEntry.file((file) => {
-            // Create a new file with the full path
             const fullPath = path ? `${path}/${file.name}` : file.name;
             Object.defineProperty(file, 'webkitRelativePath', {
               value: fullPath,
@@ -203,7 +242,6 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
                 await traverseDirectory(childEntry, childPath);
               }
 
-              // Continue reading (directories may have batched results)
               readEntries();
             }, () => resolve());
           };
@@ -237,15 +275,31 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
     setIsDragging(false);
   };
 
-  const handleManualMatch = (folderName: string, bikeId: string | null) => {
+  const handleManualMatch = async (folderName: string, vehicleId: string | null) => {
+    const folderMatch = matches.find(m => m.folderName === folderName);
+    if (!folderMatch) return;
+
+    let documents: VehicleDocument[] = [];
+    let fileMatches: FileMatch[];
+
+    if (vehicleId) {
+      documents = await loadDocumentsForVehicle(vehicleId);
+      const rawFiles = folderMatch.files.map(f => f.file);
+      fileMatches = matchFilesToDocuments(rawFiles, documents);
+    } else {
+      fileMatches = folderMatch.files.map(f => ({ file: f.file, matchedRecord: null, confidence: 0 }));
+    }
+
     setMatches((prev) =>
       prev.map((m) =>
         m.folderName === folderName
           ? {
               ...m,
-              manualOverride: bikeId,
-              matchedBike: bikeId ? bikes.find((b) => b.id === bikeId) || null : null,
-              confidence: bikeId ? 100 : 0,
+              manualOverride: vehicleId,
+              matchedVehicle: vehicleId ? vehicles.find((v) => v.id === vehicleId) || null : null,
+              vehicleConfidence: vehicleId ? 100 : 0,
+              documents,
+              files: fileMatches,
             }
           : m
       )
@@ -257,10 +311,9 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
     onImportingChange?.(true);
 
     const validMatches = matches.filter(
-      (m) => m.matchedBike || m.manualOverride
+      (m) => (m.matchedVehicle || m.manualOverride) && m.files.some(f => f.matchedRecord)
     );
 
-    // Initialize progress
     const initialProgress: Record<string, UploadProgress> = {};
     validMatches.forEach((m) => {
       initialProgress[m.folderName] = {
@@ -268,56 +321,57 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
         total: m.files.length,
         completed: 0,
         failed: 0,
+        skipped: 0,
         status: 'pending',
       };
     });
     setUploadProgress(initialProgress);
 
-    // Upload each folder
     for (const match of validMatches) {
-      const bikeId = match.manualOverride || match.matchedBike?.id;
-      if (!bikeId) continue;
+      const vehicleId = match.manualOverride || match.matchedVehicle?.id;
+      if (!vehicleId) continue;
 
       setUploadProgress((prev) => ({
         ...prev,
         [match.folderName]: { ...prev[match.folderName], status: 'uploading' },
       }));
 
-      // Get current max display_order
-      const { data: existingPhotos } = await supabase
-        .from('photos')
-        .select('display_order')
-        .eq('motorcycle_id', bikeId)
-        .order('display_order', { ascending: false })
-        .limit(1);
+      for (const fileMatch of match.files) {
+        if (!fileMatch.matchedRecord) {
+          setUploadProgress((prev) => ({
+            ...prev,
+            [match.folderName]: {
+              ...prev[match.folderName],
+              skipped: prev[match.folderName].skipped + 1,
+            },
+          }));
+          continue;
+        }
 
-      let displayOrder = existingPhotos?.[0]?.display_order ?? -1;
-
-      for (const file of match.files) {
         try {
-          displayOrder++;
-          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-          const fileName = `${bikeId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const fileExt = fileMatch.file.name.split('.').pop()?.toLowerCase() || 'pdf';
+          const storagePath = `${vehicleId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-          // Upload to storage
           const { error: uploadError } = await supabase.storage
-            .from('motorcycle-photos')
-            .upload(fileName, file, {
+            .from('vehicle-documents')
+            .upload(storagePath, fileMatch.file, {
               cacheControl: '3600',
               upsert: false,
             });
 
           if (uploadError) throw uploadError;
 
-          // Create photo record
-          const { error: dbError } = await supabase.from('photos').insert({
-            motorcycle_id: bikeId,
-            storage_path: fileName,
-            display_order: displayOrder,
-          });
+          const { error: dbError } = await supabase
+            .from('vehicle_documents')
+            .update({
+              storage_path: storagePath,
+              file_name: fileMatch.file.name,
+              file_type: fileMatch.file.type || null,
+            })
+            .eq('id', fileMatch.matchedRecord.id);
 
           if (dbError) {
-            await supabase.storage.from('motorcycle-photos').remove([fileName]);
+            await supabase.storage.from('vehicle-documents').remove([storagePath]);
             throw dbError;
           }
 
@@ -359,24 +413,27 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
     }
   };
 
-  const matchedCount = matches.filter(
-    (m) => m.matchedBike || m.manualOverride
+  const matchedFolderCount = matches.filter(
+    (m) => m.matchedVehicle || m.manualOverride
   ).length;
-  const totalPhotos = matches.reduce((sum, m) => sum + m.files.length, 0);
+  const totalFiles = matches.reduce((sum, m) => sum + m.files.length, 0);
+  const totalFileMatches = matches.reduce(
+    (sum, m) => sum + m.files.filter(f => f.matchedRecord).length,
+    0
+  );
 
   return (
     <div className="space-y-6">
-      {/* Collection Selector - shown during select and match steps */}
+      {/* Collection Selector */}
       {collections.length > 0 && (step === 'select' || step === 'match') && (
         <div className="bg-card border border-border p-4">
           <label className="block text-sm font-medium mb-2">
-            Import photos to Collection
+            Import documents to Collection
           </label>
           <select
             value={selectedCollectionId}
             onChange={(e) => {
               setSelectedCollectionId(e.target.value);
-              // Reset matches when collection changes
               setMatches([]);
               setStep('select');
             }}
@@ -388,14 +445,14 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
               </option>
             ))}
           </select>
-          {bikes.length > 0 && (
+          {vehicles.length > 0 && (
             <p className="text-sm text-muted-foreground mt-2">
-              {bikes.length} vehicle{bikes.length !== 1 ? 's' : ''} in this collection
+              {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''} in this collection
             </p>
           )}
-          {selectedCollectionId && bikes.length === 0 && (
+          {selectedCollectionId && vehicles.length === 0 && (
             <p className="text-sm text-destructive mt-2">
-              No vehicles in this collection. Import vehicles first before adding photos.
+              No vehicles in this collection. Import vehicles first.
             </p>
           )}
         </div>
@@ -413,16 +470,16 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
             multiple
             onChange={handleFileInputChange}
             className="hidden"
-            id="folder-input"
+            id="doc-folder-input"
           />
 
           <div
-            onClick={() => bikes.length > 0 && fileInputRef.current?.click()}
+            onClick={() => vehicles.length > 0 && fileInputRef.current?.click()}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             className={`border-2 border-dashed p-8 text-center transition-colors ${
-              bikes.length === 0
+              vehicles.length === 0
                 ? 'border-border opacity-50 cursor-not-allowed'
                 : isDragging
                 ? 'border-primary bg-primary/5 cursor-pointer'
@@ -431,7 +488,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
           >
             <FolderOpenIcon className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
             <p className="text-lg font-medium text-foreground">
-              {isDragging ? 'Drop folder here...' : 'Drop your folder here'}
+              {isDragging ? 'Drop folder here...' : 'Drop your document folder here'}
             </p>
             <p className="text-muted-foreground mt-1">
               or tap to select a folder
@@ -441,31 +498,37 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
           <div className="mt-4 bg-card border border-border p-4">
             <h3 className="font-semibold mb-2">Folder Structure</h3>
             <p className="text-sm text-muted-foreground mb-2">
-              Organize photos in folders named after each vehicle:
+              Organize document files in folders named after each vehicle.
+              Filenames should match document record titles:
             </p>
             <pre className="text-sm text-muted-foreground font-mono">
-{`My Photos/
+{`My Documents/
 ├── Honda CBR 650 F/
-│   ├── IMG_1234.jpg
-│   └── IMG_5678.jpg
+│   ├── Registration.pdf
+│   ├── Insurance Card.pdf
+│   └── Title.jpg
 ├── BMW R1250 GS/
-│   └── photo.png
+│   └── Registration.pdf
 └── Yamaha Vmax/
     └── ...`}
             </pre>
+            <p className="text-xs text-muted-foreground mt-2">
+              Files named like &ldquo;2019-Honda-CBR650F-Registration.pdf&rdquo; are also supported.
+            </p>
           </div>
         </div>
       )}
 
-      {/* Step 2: Match Folders to Bikes */}
+      {/* Step 2: Match Folders to Vehicles & Files to Records */}
       {step === 'match' && (
         <div className="space-y-6">
           <div className="bg-card border border-border p-4">
             <h3 className="font-semibold mb-2">
-              Found {matches.length} folders with {totalPhotos} photos
+              Found {matches.length} folder{matches.length !== 1 ? 's' : ''} with {totalFiles} file{totalFiles !== 1 ? 's' : ''}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {matchedCount} of {matches.length} folders matched to vehicles
+              {matchedFolderCount} of {matches.length} folders matched to vehicles
+              {totalFileMatches > 0 && ` \u2022 ${totalFileMatches} file${totalFileMatches !== 1 ? 's' : ''} matched to document records`}
             </p>
           </div>
 
@@ -474,7 +537,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
               <div
                 key={match.folderName}
                 className={`border p-4 ${
-                  match.matchedBike || match.manualOverride
+                  match.matchedVehicle || match.manualOverride
                     ? 'border-secondary bg-secondary/5'
                     : 'border-border'
                 }`}
@@ -483,33 +546,70 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
                   <div className="flex-1">
                     <p className="font-medium">{match.folderName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {match.files.length} photo{match.files.length !== 1 ? 's' : ''}
+                      {match.files.length} file{match.files.length !== 1 ? 's' : ''}
+                      {match.files.filter(f => f.matchedRecord).length > 0 && (
+                        <span className="text-secondary">
+                          {' '}&bull; {match.files.filter(f => f.matchedRecord).length} matched to records
+                        </span>
+                      )}
                     </p>
                   </div>
 
-                  {match.matchedBike && !match.manualOverride && (
+                  {match.matchedVehicle && !match.manualOverride && (
                     <span className="text-sm text-secondary">
-                      {match.confidence}% match
+                      {match.vehicleConfidence}% match
                     </span>
                   )}
                 </div>
 
                 <div className="mt-3">
                   <select
-                    value={match.manualOverride || match.matchedBike?.id || ''}
+                    value={match.manualOverride || match.matchedVehicle?.id || ''}
                     onChange={(e) =>
                       handleManualMatch(match.folderName, e.target.value || null)
                     }
                     className="w-full px-3 py-2 bg-background border border-input text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">-- Select vehicle --</option>
-                    {bikes.map((bike) => (
-                      <option key={bike.id} value={bike.id}>
-                        {bike.name} {bike.year ? `(${bike.year})` : ''}
+                    {vehicles.map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.name} {vehicle.year ? `(${vehicle.year})` : ''}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Per-file matching display */}
+                {(match.matchedVehicle || match.manualOverride) && match.documents.length > 0 && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">File &rarr; Document Record Matching:</p>
+                    <div className="space-y-1">
+                      {match.files.map((fm, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs">
+                          {fm.matchedRecord ? (
+                            <CheckCircleIcon className="w-4 h-4 text-secondary flex-shrink-0" />
+                          ) : (
+                            <XCircleIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          )}
+                          <span className="truncate flex-1">{fm.file.name}</span>
+                          {fm.matchedRecord ? (
+                            <span className="text-secondary flex-shrink-0">
+                              &rarr; {fm.matchedRecord.title}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground flex-shrink-0">unmatched</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(match.matchedVehicle || match.manualOverride) && match.documents.length === 0 && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    No document records found for this vehicle. Import document records via CSV first.
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -517,10 +617,10 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
           <div className="flex gap-3">
             <button
               onClick={startUpload}
-              disabled={matchedCount === 0}
+              disabled={totalFileMatches === 0}
               className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50"
             >
-              Upload {matchedCount > 0 ? `${matchedCount} Folder${matchedCount !== 1 ? 's' : ''}` : 'Photos'}
+              Upload {totalFileMatches > 0 ? `${totalFileMatches} Matched File${totalFileMatches !== 1 ? 's' : ''}` : 'Documents'}
             </button>
             <button
               onClick={reset}
@@ -532,7 +632,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
         </div>
       )}
 
-      {/* Step 3: Uploading */}
+      {/* Step 3/4: Uploading & Done */}
       {(step === 'uploading' || step === 'done') && (
         <div className="space-y-4">
           {step === 'uploading' && (
@@ -562,7 +662,10 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
                     <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   ) : null}
                   <span className="text-sm text-muted-foreground">
-                    {progress.completed}/{progress.total}
+                    {progress.completed}/{progress.total - progress.skipped}
+                    {progress.skipped > 0 && (
+                      <span> ({progress.skipped} skipped)</span>
+                    )}
                     {progress.failed > 0 && (
                       <span className="text-destructive"> ({progress.failed} failed)</span>
                     )}
@@ -575,7 +678,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
                     progress.failed > 0 ? 'bg-destructive' : 'bg-secondary'
                   }`}
                   style={{
-                    width: `${((progress.completed + progress.failed) / progress.total) * 100}%`,
+                    width: `${((progress.completed + progress.failed) / Math.max(progress.total - progress.skipped, 1)) * 100}%`,
                   }}
                 />
               </div>

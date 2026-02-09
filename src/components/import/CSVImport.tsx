@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import JSZip from 'jszip';
@@ -25,6 +25,7 @@ interface SubscriptionInfo {
 interface CSVImportProps {
   collections: UserCollection[];
   subscriptionInfo: SubscriptionInfo;
+  onStepChange?: (step: 'upload' | 'map' | 'preview' | 'importing' | 'done') => void;
 }
 
 interface CSVRow {
@@ -116,6 +117,8 @@ interface VehicleZipFiles {
   photos: ZipFileEntry[];
   documents: ZipFileEntry[];
   receipts: ZipFileEntry[];
+  /** Index of the showcase photo (from vehicle-data JSON), or -1 if unknown */
+  showcasePhotoIndex: number;
 }
 
 const fieldLabels: Record<keyof ColumnMapping, string> = {
@@ -245,11 +248,18 @@ function parseComprehensiveCSV(rows: CSVRow[]): {
  * Handles both new structure (images/, documents/, receipts/ at root) and
  * old structure (motorcycles/{name}/images/...).
  */
-function buildZipFileMap(zip: JSZip): {
+async function buildZipFileMap(zip: JSZip): Promise<{
   isNewStructure: boolean;
   fileMap: Map<string, VehicleZipFiles>;
-} {
+}> {
   const fileMap = new Map<string, VehicleZipFiles>();
+
+  const ensureVehicle = (name: string) => {
+    if (!fileMap.has(name)) {
+      fileMap.set(name, { photos: [], documents: [], receipts: [], showcasePhotoIndex: -1 });
+    }
+    return fileMap.get(name)!;
+  };
 
   // Detect structure: check if we have top-level images/, documents/, or receipts/ folders
   const paths = Object.keys(zip.files);
@@ -295,10 +305,7 @@ function buildZipFileMap(zip: JSZip): {
       const vehicleName = parts[1];
       const fileName = parts.slice(2).join('/');
 
-      if (!fileMap.has(vehicleName)) {
-        fileMap.set(vehicleName, { photos: [], documents: [], receipts: [] });
-      }
-      const vehicleFiles = fileMap.get(vehicleName)!;
+      const vehicleFiles = ensureVehicle(vehicleName);
 
       if (type === 'images') {
         vehicleFiles.photos.push({ name: fileName, entry });
@@ -328,10 +335,7 @@ function buildZipFileMap(zip: JSZip): {
       const vehicleName = parts[1];
       const subPath = parts.slice(2).join('/');
 
-      if (!fileMap.has(vehicleName)) {
-        fileMap.set(vehicleName, { photos: [], documents: [], receipts: [] });
-      }
-      const vehicleFiles = fileMap.get(vehicleName)!;
+      const vehicleFiles = ensureVehicle(vehicleName);
 
       if (subPath.startsWith('images/photos/')) {
         vehicleFiles.photos.push({ name: parts[parts.length - 1], entry });
@@ -343,13 +347,37 @@ function buildZipFileMap(zip: JSZip): {
     }
   }
 
+  // Parse vehicle-data JSON files to extract showcase photo info
+  // Structure: {root}/vehicle-data/{vehicleName}.json
+  for (const [path, entry] of Object.entries(zip.files)) {
+    if (entry.dir) continue;
+    if (!path.includes('vehicle-data/') || !path.endsWith('.json')) continue;
+
+    try {
+      const jsonText = await entry.async('string');
+      const data = JSON.parse(jsonText);
+      const vehicleName = data?.vehicle?.name;
+      if (!vehicleName || !Array.isArray(data.photos)) continue;
+
+      const vehicleFiles = ensureVehicle(vehicleName);
+
+      // Find which photo index has is_showcase: true
+      const showcaseIdx = data.photos.findIndex((p: { is_showcase?: boolean }) => p.is_showcase === true);
+      if (showcaseIdx >= 0) {
+        vehicleFiles.showcasePhotoIndex = showcaseIdx;
+      }
+    } catch {
+      // Skip unparseable JSON
+    }
+  }
+
   return { isNewStructure, fileMap };
 }
 
 const VALID_DOC_TYPES: DocumentType[] = ['title', 'registration', 'insurance', 'receipt', 'manual', 'other'];
 const VALID_SERVICE_CATEGORIES: ServiceCategory[] = ['maintenance', 'repair', 'upgrade', 'inspection'];
 
-export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
+export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVImportProps) {
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -386,6 +414,11 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
 
   const supabase = createClient();
+
+  // Notify parent of step changes
+  useEffect(() => {
+    onStepChange?.(importing ? 'importing' : step);
+  }, [step, importing, onStepChange]);
 
   const processVehicleCSV = useCallback((text: string) => {
     const lines = text.split('\n').filter(line => line.trim());
@@ -622,7 +655,7 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
         zipRef.current = zip;
 
         // Build file map for binary files
-        const { fileMap } = buildZipFileMap(zip);
+        const { fileMap } = await buildZipFileMap(zip);
         setZipFileMap(fileMap);
 
         // Find the main CSV file - prefer collection-export.csv (new format), fallback to vehicles.csv (old)
@@ -1074,6 +1107,11 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
         const vehicleFiles = zipFileMap.get(vehicleName);
         if (!vehicleFiles || vehicleFiles.photos.length === 0) continue;
 
+        // Use showcase info from vehicle-data JSON if available, otherwise default to first photo
+        const showcaseIdx = vehicleFiles.showcasePhotoIndex >= 0
+          ? vehicleFiles.showcasePhotoIndex
+          : 0;
+
         for (let i = 0; i < vehicleFiles.photos.length; i++) {
           const photo = vehicleFiles.photos[i];
           try {
@@ -1092,7 +1130,7 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
                 motorcycle_id: vehicleId,
                 storage_path: storagePath,
                 display_order: i,
-                is_showcase: i === 0,
+                is_showcase: i === showcaseIdx,
               });
               photosImported++;
             }
@@ -1349,6 +1387,7 @@ export function CSVImport({ collections, subscriptionInfo }: CSVImportProps) {
           {importing && importProgress && (
             <div className="bg-card border border-border p-4">
               <p className="text-sm text-muted-foreground">{importProgress}</p>
+              <p className="text-xs text-destructive font-medium mt-2">Don&apos;t leave this page or progress will be lost. This may take a little while.</p>
             </div>
           )}
 

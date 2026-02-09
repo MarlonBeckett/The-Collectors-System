@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CSVImport } from '@/components/import/CSVImport';
 import { ZipExport } from '@/components/import/ZipExport';
 import { BulkPhotoImport } from '@/components/import/BulkPhotoImport';
+import { BulkDocumentImport } from '@/components/import/BulkDocumentImport';
+import { BulkReceiptImport } from '@/components/import/BulkReceiptImport';
 import Link from 'next/link';
-import { ArrowLeftIcon, SparklesIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, SparklesIcon, ClipboardDocumentIcon, CheckIcon, ArchiveBoxIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 type Tab = 'import' | 'export';
+type ImportSource = null | 'zip' | 'csv';
 
 interface UserCollection {
   id: string;
@@ -161,12 +164,26 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
   const [activeTab, setActiveTab] = useState<Tab>(
     tabParam === 'export' ? 'export' : 'import'
   );
+  const [importSource, setImportSource] = useState<ImportSource>(null);
+  const [csvStep, setCsvStep] = useState<string>('upload');
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     if (tabParam === 'export') {
       setActiveTab('export');
     }
   }, [tabParam]);
+
+  const handleCsvStepChange = useCallback((step: string) => {
+    setCsvStep(step);
+    setIsImporting(step === 'importing');
+  }, []);
+
+  const handleBulkImportingChange = useCallback((importing: boolean) => {
+    setIsImporting(importing);
+  }, []);
+
+  const csvImportDone = csvStep === 'done';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -214,28 +231,156 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
       <div className="space-y-6">
         {activeTab === 'import' && (
           <>
-            <AIPromptHelper />
+            {/* Source Selection */}
+            {importSource === null && (
+              <>
+                <AIPromptHelper />
 
-            <div className="bg-card border border-border p-4">
-              <h2 className="font-semibold mb-2">Import Tips</h2>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>Upload a CSV or a ZIP exported from this app</li>
-                <li>ZIP files can include documents.csv and service-records.csv</li>
-                <li>&ldquo;Name&rdquo; column is required</li>
-                <li>Dates can be: 6/25, 6/25/26, or 6/25/2026</li>
-                <li>Notes starting with SOLD or TRADED will set status</li>
-              </ul>
-            </div>
+                <div>
+                  <h2 className="font-semibold mb-3">What are you importing?</h2>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => setImportSource('zip')}
+                      className="w-full flex items-start gap-4 p-4 border border-border hover:border-primary bg-card transition-colors text-left"
+                    >
+                      <ArchiveBoxIcon className="w-8 h-8 text-primary flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">A TCS ZIP file</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          A ZIP file exported from The Collectors System. This includes all your vehicle data, photos, documents, and service records in one file.
+                        </p>
+                      </div>
+                    </button>
 
-            <CSVImport collections={collections} subscriptionInfo={subscriptionInfo} />
+                    <button
+                      onClick={() => setImportSource('csv')}
+                      className="w-full flex items-start gap-4 p-4 border border-border hover:border-primary bg-card transition-colors text-left"
+                    >
+                      <DocumentTextIcon className="w-8 h-8 text-primary flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">A CSV file with separate photo/document folders</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          A spreadsheet with your vehicle data, plus separate folders for photos, documents, and service receipts.
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
-            <div className="border-t border-border pt-6">
-              <h2 className="font-semibold mb-2">Bulk Photo Import</h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                Organize photos in folders named after each vehicle, then upload them all at once.
-              </p>
-              <BulkPhotoImport collections={collections} />
-            </div>
+            {/* ZIP Import Flow */}
+            {importSource === 'zip' && (
+              <>
+                {!isImporting && csvStep !== 'done' && (
+                  <button
+                    onClick={() => setImportSource(null)}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeftIcon className="w-4 h-4" />
+                    Back to import options
+                  </button>
+                )}
+
+                <div className="bg-card border border-border p-4">
+                  <h2 className="font-semibold mb-2">Import TCS ZIP File</h2>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>Upload a ZIP file exported from The Collectors System</li>
+                    <li>Includes vehicles, photos, documents, service records, and mileage history</li>
+                    <li>Everything will be imported automatically</li>
+                  </ul>
+                </div>
+
+                {isImporting && (
+                  <p className="text-xs text-destructive font-medium">Don&apos;t leave this page or progress will be lost. This may take a little while.</p>
+                )}
+
+                <CSVImport collections={collections} subscriptionInfo={subscriptionInfo} onStepChange={handleCsvStepChange} />
+              </>
+            )}
+
+            {/* CSV + Separate Files Flow */}
+            {importSource === 'csv' && (
+              <>
+                {!isImporting && !csvImportDone && (
+                  <button
+                    onClick={() => setImportSource(null)}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeftIcon className="w-4 h-4" />
+                    Back to import options
+                  </button>
+                )}
+
+                {/* Step 1: CSV Import */}
+                <div className="bg-card border border-border p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                      csvImportDone ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
+                    }`}>1</span>
+                    <h2 className="font-semibold">Import Vehicle Data (CSV)</h2>
+                  </div>
+                  {!csvImportDone && (
+                    <ul className="text-sm text-muted-foreground space-y-1 ml-8">
+                      <li>&ldquo;Name&rdquo; column is required</li>
+                      <li>Dates can be: 6/25, 6/25/26, or 6/25/2026</li>
+                      <li>Notes starting with SOLD or TRADED will set status</li>
+                    </ul>
+                  )}
+                  {csvImportDone && (
+                    <p className="text-sm text-secondary ml-8">Vehicle data imported successfully. Now upload your files below.</p>
+                  )}
+                </div>
+
+                {isImporting && (
+                  <p className="text-xs text-destructive font-medium">Don&apos;t leave this page or progress will be lost. This may take a little while.</p>
+                )}
+
+                {!csvImportDone && (
+                  <CSVImport collections={collections} subscriptionInfo={subscriptionInfo} onStepChange={handleCsvStepChange} />
+                )}
+
+                {/* Step 2: Bulk file uploads (shown after CSV import completes) */}
+                {csvImportDone && (
+                  <>
+                    <div className="border-t border-border pt-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-primary text-primary-foreground">2</span>
+                        <h2 className="font-semibold">Upload Photos</h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4 ml-8">
+                        Organize photos in folders named after each vehicle, then upload them all at once.
+                      </p>
+                      <BulkPhotoImport collections={collections} onImportingChange={handleBulkImportingChange} />
+                    </div>
+
+                    <div className="border-t border-border pt-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-primary text-primary-foreground">3</span>
+                        <h2 className="font-semibold">Upload Document Files</h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4 ml-8">
+                        Upload document files (PDFs, images) organized in folders by vehicle name.
+                        Files are matched to existing document records by title.
+                      </p>
+                      <BulkDocumentImport collections={collections} onImportingChange={handleBulkImportingChange} />
+                    </div>
+
+                    <div className="border-t border-border pt-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold bg-primary text-primary-foreground">4</span>
+                        <h2 className="font-semibold">Upload Service Receipts</h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-4 ml-8">
+                        Upload service receipt files organized in folders by vehicle name.
+                        Files are matched to existing service records by title.
+                      </p>
+                      <BulkReceiptImport collections={collections} onImportingChange={handleBulkImportingChange} />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
 

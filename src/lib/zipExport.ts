@@ -142,6 +142,7 @@ function buildVehicleInfoJson(
         storage_path: p.storage_path,
         display_order: p.display_order,
         caption: p.caption,
+        is_showcase: p.is_showcase,
         created_at: p.created_at,
       })),
       documents: documents.map((d) => ({
