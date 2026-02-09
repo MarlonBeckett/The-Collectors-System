@@ -1,4 +1,4 @@
-import { Motorcycle, VehicleDocument, ServiceRecord } from '@/types/database';
+import { Motorcycle, VehicleDocument, ServiceRecord, MileageHistory } from '@/types/database';
 import Papa from 'papaparse';
 
 export interface ExportOptions {
@@ -181,5 +181,182 @@ export function generateServiceRecordsCSV(
   return Papa.unparse(rows, {
     header: true,
     columns: ['vehicle_name', 'service_date', 'title', 'description', 'cost', 'odometer', 'shop_name', 'category'],
+  });
+}
+
+// --- Comprehensive CSV (all record types in one file) ---
+
+export interface ComprehensiveExportRow {
+  record_type: string;
+  vehicle_name: string;
+  make: string;
+  model: string;
+  year: string;
+  vehicle_type: string;
+  vin: string;
+  plate_number: string;
+  mileage: string;
+  tab_expiration: string;
+  status: string;
+  notes: string;
+  purchase_price: string;
+  purchase_date: string;
+  nickname: string;
+  maintenance_notes: string;
+  estimated_value: string;
+  sale_info_type: string;
+  sale_info_date: string;
+  sale_info_amount: string;
+  sale_info_notes: string;
+  service_date: string;
+  service_title: string;
+  service_description: string;
+  service_cost: string;
+  service_odometer: string;
+  service_shop: string;
+  service_category: string;
+  service_receipt_files: string;
+  document_title: string;
+  document_type: string;
+  document_expiration: string;
+  document_file_name: string;
+  document_file_type: string;
+  recorded_date: string;
+}
+
+const COMPREHENSIVE_COLUMNS: (keyof ComprehensiveExportRow)[] = [
+  'record_type',
+  'vehicle_name',
+  'make',
+  'model',
+  'year',
+  'vehicle_type',
+  'vin',
+  'plate_number',
+  'mileage',
+  'tab_expiration',
+  'status',
+  'notes',
+  'purchase_price',
+  'purchase_date',
+  'nickname',
+  'maintenance_notes',
+  'estimated_value',
+  'sale_info_type',
+  'sale_info_date',
+  'sale_info_amount',
+  'sale_info_notes',
+  'service_date',
+  'service_title',
+  'service_description',
+  'service_cost',
+  'service_odometer',
+  'service_shop',
+  'service_category',
+  'service_receipt_files',
+  'document_title',
+  'document_type',
+  'document_expiration',
+  'document_file_name',
+  'document_file_type',
+  'recorded_date',
+];
+
+function emptyRow(vehicleName: string, recordType: string): ComprehensiveExportRow {
+  const row: ComprehensiveExportRow = {
+    record_type: recordType,
+    vehicle_name: vehicleName,
+    make: '', model: '', year: '', vehicle_type: '', vin: '', plate_number: '',
+    mileage: '', tab_expiration: '', status: '', notes: '',
+    purchase_price: '', purchase_date: '', nickname: '', maintenance_notes: '',
+    estimated_value: '', sale_info_type: '', sale_info_date: '', sale_info_amount: '', sale_info_notes: '',
+    service_date: '', service_title: '', service_description: '', service_cost: '',
+    service_odometer: '', service_shop: '', service_category: '', service_receipt_files: '',
+    document_title: '', document_type: '', document_expiration: '', document_file_name: '', document_file_type: '',
+    recorded_date: '',
+  };
+  return row;
+}
+
+export function generateComprehensiveCSV(
+  vehicles: Motorcycle[],
+  documents: (VehicleDocument & { vehicle_name: string })[],
+  serviceRecords: (ServiceRecord & { vehicle_name: string; receipt_files: string })[],
+  mileageHistory: (MileageHistory & { vehicle_name: string })[],
+  options: ExportOptions
+): string {
+  const filtered = filterVehiclesForExport(vehicles, options);
+  const filteredNames = new Set(filtered.map((v) => v.name));
+
+  const rows: ComprehensiveExportRow[] = [];
+
+  for (const vehicle of filtered) {
+    // Vehicle row
+    const vRow = emptyRow(vehicle.name, 'vehicle');
+    vRow.make = vehicle.make || '';
+    vRow.model = vehicle.model || '';
+    vRow.year = vehicle.year?.toString() || '';
+    vRow.vehicle_type = vehicle.vehicle_type || 'motorcycle';
+    vRow.vin = vehicle.vin || '';
+    vRow.plate_number = vehicle.plate_number || '';
+    vRow.mileage = vehicle.mileage || '';
+    vRow.tab_expiration = vehicle.tab_expiration || '';
+    vRow.status = vehicle.status || 'active';
+    vRow.notes = vehicle.notes || '';
+    vRow.purchase_price = vehicle.purchase_price?.toString() || '';
+    vRow.purchase_date = vehicle.purchase_date || '';
+    vRow.nickname = vehicle.nickname || '';
+    vRow.maintenance_notes = vehicle.maintenance_notes || '';
+    vRow.estimated_value = vehicle.estimated_value?.toString() || '';
+    if (vehicle.sale_info) {
+      vRow.sale_info_type = vehicle.sale_info.type || '';
+      vRow.sale_info_date = vehicle.sale_info.date || '';
+      vRow.sale_info_amount = vehicle.sale_info.amount?.toString() || '';
+      vRow.sale_info_notes = vehicle.sale_info.notes || '';
+    }
+    rows.push(vRow);
+
+    // Service record rows for this vehicle
+    const vehicleServices = serviceRecords.filter((sr) => sr.vehicle_name === vehicle.name);
+    for (const sr of vehicleServices) {
+      const sRow = emptyRow(vehicle.name, 'service');
+      sRow.service_date = sr.service_date || '';
+      sRow.service_title = sr.title || '';
+      sRow.service_description = sr.description || '';
+      sRow.service_cost = sr.cost?.toString() || '';
+      sRow.service_odometer = sr.odometer?.toString() || '';
+      sRow.service_shop = sr.shop_name || '';
+      sRow.service_category = sr.category || '';
+      sRow.service_receipt_files = sr.receipt_files || '';
+      rows.push(sRow);
+    }
+
+    // Document rows for this vehicle
+    const vehicleDocs = documents.filter((d) => d.vehicle_name === vehicle.name);
+    for (const doc of vehicleDocs) {
+      const dRow = emptyRow(vehicle.name, 'document');
+      dRow.document_title = doc.title || '';
+      dRow.document_type = doc.document_type || '';
+      dRow.document_expiration = doc.expiration_date || '';
+      dRow.document_file_name = doc.file_name || '';
+      dRow.document_file_type = doc.file_type || '';
+      dRow.notes = doc.notes || '';
+      rows.push(dRow);
+    }
+
+    // Mileage history rows for this vehicle
+    const vehicleMileage = mileageHistory.filter((m) => m.vehicle_name === vehicle.name);
+    for (const m of vehicleMileage) {
+      const mRow = emptyRow(vehicle.name, 'mileage');
+      mRow.mileage = m.mileage?.toString() || '';
+      mRow.recorded_date = m.recorded_date || '';
+      mRow.notes = m.notes || '';
+      rows.push(mRow);
+    }
+  }
+
+  return Papa.unparse(rows, {
+    header: true,
+    columns: COMPREHENSIVE_COLUMNS,
   });
 }

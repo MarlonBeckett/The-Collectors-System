@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/layout/AppShell';
 import { VehicleForm } from '@/components/vehicles/VehicleForm';
+import { VehicleJsonUpload } from '@/components/import/VehicleJsonUpload';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ArrowLeftIcon, DocumentArrowDownIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { getUserSubscription } from '@/lib/subscription.server';
 import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
@@ -115,32 +116,18 @@ export default async function NewVehiclePage() {
 
         <VehicleForm mode="create" collections={editableCollections} />
 
-        {/* Bulk Import Section */}
+        {/* JSON Import Section */}
         <div className="mt-8 pt-6 border-t border-border">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Bulk Import</h2>
-          <div className="grid gap-3">
-            <Link
-              href="/import"
-              className="flex items-center gap-3 p-4 bg-card border border-border hover:border-primary transition-colors"
-            >
-              <DocumentArrowDownIcon className="w-6 h-6 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Import from CSV</p>
-                <p className="text-sm text-muted-foreground">Import multiple vehicles from a spreadsheet</p>
-              </div>
-            </Link>
-            <Link
-              href="/import/photos"
-              className="flex items-center gap-3 p-4 bg-card border border-border hover:border-primary transition-colors"
-            >
-              <PhotoIcon className="w-6 h-6 text-muted-foreground" />
-              <div>
-                <p className="font-medium">Import Photos from Folder</p>
-                <p className="text-sm text-muted-foreground">Bulk upload photos organized by vehicle</p>
-              </div>
-            </Link>
-          </div>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Import from JSON</h2>
+          <VehicleJsonUpload collections={editableCollections} />
         </div>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Need to import multiple vehicles?{' '}
+          <Link href="/settings#data" className="text-primary underline hover:opacity-80">
+            Go to Data Management in settings
+          </Link>
+        </p>
       </div>
     </AppShell>
   );

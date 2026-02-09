@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Motorcycle, MotorcycleStatus, VehicleType } from '@/types/database';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { PhotoUploader } from '@/components/photos/PhotoUploader';
+import { CreatePhotoUploader, StagedPhoto } from '@/components/photos/CreatePhotoUploader';
 
 interface EditableCollection {
   id: string;
@@ -61,7 +62,9 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
       : ''
   );
 
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [photoUploadStatus, setPhotoUploadStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -112,6 +115,37 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
             mileage: mileageNum,
             recorded_date: mileageDate,
           });
+        }
+
+        // Upload staged photos
+        if (stagedPhotos.length > 0) {
+          for (let i = 0; i < stagedPhotos.length; i++) {
+            const staged = stagedPhotos[i];
+            setPhotoUploadStatus(`Uploading photos (${i + 1}/${stagedPhotos.length})...`);
+
+            const fileExt = staged.file.name.split('.').pop()?.toLowerCase() || 'jpg';
+            const storagePath = `${data.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('motorcycle-photos')
+              .upload(storagePath, staged.file, {
+                cacheControl: '3600',
+                upsert: false,
+              });
+
+            if (uploadError) {
+              console.error('Photo upload failed:', uploadError.message);
+              continue;
+            }
+
+            await supabase.from('photos').insert({
+              motorcycle_id: data.id,
+              storage_path: storagePath,
+              display_order: i,
+              is_showcase: staged.isShowcase,
+            });
+          }
+          setPhotoUploadStatus(null);
         }
 
         router.push(`/vehicles/${data.id}`);
@@ -452,15 +486,17 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
         />
       </div>
 
-      {/* Photo Upload (only in edit mode) */}
-      {mode === 'edit' && vehicle && (
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Photos
-          </label>
+      {/* Photo Upload */}
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Photos
+        </label>
+        {mode === 'create' ? (
+          <CreatePhotoUploader onPhotosChange={setStagedPhotos} />
+        ) : vehicle ? (
           <PhotoUploader motorcycleId={vehicle.id} />
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Submit Button */}
       <div className="flex gap-3">
@@ -469,7 +505,11 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
           disabled={loading || !name}
           className="flex-1 min-h-[44px] py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
-          {loading ? 'Saving...' : mode === 'create' ? 'Add Vehicle' : 'Save Changes'}
+          {loading
+            ? (photoUploadStatus || 'Saving...')
+            : mode === 'create'
+              ? 'Add Vehicle'
+              : 'Save Changes'}
         </button>
 
         <button

@@ -4,13 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
 import {
-  generateCSV,
-  downloadCSV,
+  generateComprehensiveCSV,
   ExportOptions,
-  generateDocumentsCSV,
-  generateServiceRecordsCSV,
 } from '@/lib/exportUtils';
-import { VehicleDocument, ServiceRecord } from '@/types/database';
+import { ServiceRecord, MileageHistory } from '@/types/database';
 import {
   exportCollectionZip,
   exportVehicleZip,
@@ -182,68 +179,73 @@ export function ZipExport({ collections }: ZipExportProps) {
       const collectionName = collection?.name.toLowerCase().replace(/\s+/g, '-') || 'vehicles';
       const date = new Date().toISOString().split('T')[0];
 
-      const vehiclesCsv = generateCSV(vehicles, csvOptions);
-
-      // Fetch documents and service records for all vehicles
+      // Fetch all data: documents, service records + receipts, mileage history
       const vehicleIds = vehicles.map((v) => v.id);
       const vehicleNameMap = new Map(vehicles.map((v) => [v.id, v.name]));
 
-      const [docsRes, recordsRes] = await Promise.all([
+      const [docsRes, recordsRes, mileageRes] = await Promise.all([
         vehicleIds.length > 0
           ? supabase.from('vehicle_documents').select('*').in('motorcycle_id', vehicleIds)
           : Promise.resolve({ data: [], error: null }),
         vehicleIds.length > 0
           ? supabase.from('service_records').select('*').in('motorcycle_id', vehicleIds).order('service_date', { ascending: false })
           : Promise.resolve({ data: [], error: null }),
+        vehicleIds.length > 0
+          ? supabase.from('mileage_history').select('*').in('motorcycle_id', vehicleIds).order('recorded_date', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
-      const documents = ((docsRes.data || []) as VehicleDocument[]).map((d) => ({
+      const documents = ((docsRes.data || []) as import('@/types/database').VehicleDocument[]).map((d) => ({
         ...d,
         vehicle_name: vehicleNameMap.get(d.motorcycle_id) || '',
       }));
 
-      const serviceRecords = ((recordsRes.data || []) as ServiceRecord[]).map((r) => ({
-        ...r,
-        vehicle_name: vehicleNameMap.get(r.motorcycle_id) || '',
+      const serviceRecordsRaw = (recordsRes.data || []) as ServiceRecord[];
+
+      // Fetch receipts for service records to get file names
+      const serviceRecordIds = serviceRecordsRaw.map((sr) => sr.id);
+      let allReceipts: import('@/types/database').ServiceRecordReceipt[] = [];
+      if (serviceRecordIds.length > 0) {
+        const { data: receiptsData } = await supabase
+          .from('service_record_receipts')
+          .select('*')
+          .in('service_record_id', serviceRecordIds);
+        allReceipts = (receiptsData || []) as import('@/types/database').ServiceRecordReceipt[];
+      }
+
+      const serviceRecords = serviceRecordsRaw.map((r) => {
+        const receipts = allReceipts.filter((rc) => rc.service_record_id === r.id);
+        return {
+          ...r,
+          vehicle_name: vehicleNameMap.get(r.motorcycle_id) || '',
+          receipt_files: receipts.map((rc) => rc.file_name).join(','),
+        };
+      });
+
+      const mileageHistory = ((mileageRes.data || []) as MileageHistory[]).map((m) => ({
+        ...m,
+        vehicle_name: vehicleNameMap.get(m.motorcycle_id) || '',
       }));
 
-      // If there are documents or service records, bundle as ZIP
-      if (documents.length > 0 || serviceRecords.length > 0) {
-        const JSZip = (await import('jszip')).default;
-        const zip = new JSZip();
-        let fileCount = 1;
+      // Generate comprehensive CSV and bundle as ZIP
+      const csvContent = generateComprehensiveCSV(vehicles, documents, serviceRecords, mileageHistory, csvOptions);
 
-        zip.file('csv/vehicles.csv', vehiclesCsv);
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      zip.file('csv/collection-export.csv', csvContent);
 
-        if (documents.length > 0) {
-          zip.file('csv/documents.csv', generateDocumentsCSV(documents));
-          fileCount++;
-        }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${collectionName}-export-${date}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-        if (serviceRecords.length > 0) {
-          zip.file('csv/service-records.csv', generateServiceRecordsCSV(serviceRecords));
-          fileCount++;
-        }
-
-        const blob = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `${collectionName}-export-${date}.zip`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        if (!controller.signal.aborted) {
-          setResult({ success: true, totalFiles: fileCount, skippedFiles: 0, skippedDetails: [] });
-        }
-      } else {
-        // No related data, just download plain CSV
-        downloadCSV(vehiclesCsv, `${collectionName}-export-${date}.csv`);
-        if (!controller.signal.aborted) {
-          setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
-        }
+      if (!controller.signal.aborted) {
+        setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
       }
     } catch (err) {
       if (!controller.signal.aborted) {
