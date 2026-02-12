@@ -22,6 +22,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -48,10 +49,7 @@ export function ZipExport({ collections }: ZipExportProps) {
     encodeStatusInNotes: true,
   });
 
-  const defaultCollection = collections.find((c) => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(
-    defaultCollection?.id || ''
-  );
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const abortRef = useRef<AbortController | null>(null);
 

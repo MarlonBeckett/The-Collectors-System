@@ -9,6 +9,7 @@ import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { parseStatusFromNotes } from '@/lib/statusParser';
 import { DocumentArrowUpIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { DocumentType, ServiceCategory } from '@/types/database';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -409,9 +410,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
   const zipRef = useRef<JSZip | null>(null);
   const [zipFileMap, setZipFileMap] = useState<Map<string, VehicleZipFiles>>(new Map());
 
-  // Default to first owned collection, or first collection if none owned
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
 

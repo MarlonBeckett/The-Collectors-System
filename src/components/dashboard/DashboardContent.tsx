@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Motorcycle } from '@/types/database';
 import { VehicleList } from './VehicleList';
 import { CollectionSwitcher, CollectionOption } from './CollectionSwitcher';
 import UpgradeBanner from '@/components/subscription/UpgradeBanner';
 import { useImagePreloader } from '@/hooks/useImagePreloader';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 import { DashboardSkeleton } from '@/components/ui/DashboardSkeleton';
 
 interface UserCollection {
@@ -32,11 +33,8 @@ interface DashboardContentProps {
   subscriptionInfo: SubscriptionInfo;
 }
 
-const STORAGE_KEY = 'selectedCollectionId';
-
 export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subscriptionInfo }: DashboardContentProps) {
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   // Preload first 5 showcase photos
   const preloadUrls = useMemo(
@@ -44,22 +42,6 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
     [vehiclePhotoMap]
   );
   const { ready: imagesReady } = useImagePreloader(preloadUrls);
-
-  // Load selected collection from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && collections.some((c) => c.id === stored)) {
-      setSelectedCollectionId(stored);
-    } else if (collections.length > 0) {
-      setSelectedCollectionId(collections[0].id);
-    }
-    setIsLoaded(true);
-  }, [collections]);
-
-  const handleSelectCollection = (collectionId: string) => {
-    setSelectedCollectionId(collectionId);
-    localStorage.setItem(STORAGE_KEY, collectionId);
-  };
 
   const filteredVehicles = selectedCollectionId
     ? vehicles.filter((v) => v.collection_id === selectedCollectionId)
@@ -73,7 +55,7 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
     is_owner: c.is_owner,
   }));
 
-  if (!isLoaded || !imagesReady) {
+  if (!imagesReady) {
     return <DashboardSkeleton />;
   }
 
@@ -83,7 +65,7 @@ export function DashboardContent({ collections, vehicles, vehiclePhotoMap, subsc
         <CollectionSwitcher
           collections={collectionOptions}
           currentCollectionId={selectedCollectionId}
-          onSelect={handleSelectCollection}
+          onSelect={setSelectedCollectionId}
         />
       </div>
 

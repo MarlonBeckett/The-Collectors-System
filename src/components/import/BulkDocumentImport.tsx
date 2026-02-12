@@ -6,6 +6,7 @@ import { Motorcycle, VehicleDocument } from '@/types/database';
 import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { matchFileToRecord } from '@/lib/importFileMatcher';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -62,8 +63,7 @@ export function BulkDocumentImport({ collections, onImportingChange }: BulkDocum
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setHookCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
 
@@ -434,7 +434,7 @@ export function BulkDocumentImport({ collections, onImportingChange }: BulkDocum
           <select
             value={selectedCollectionId}
             onChange={(e) => {
-              setSelectedCollectionId(e.target.value);
+              setHookCollectionId(e.target.value);
               setMatches([]);
               setStep('select');
             }}

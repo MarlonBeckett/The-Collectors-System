@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { DocumentArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { DocumentType, ServiceCategory } from '@/types/database';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -87,8 +88,7 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
   const router = useRouter();

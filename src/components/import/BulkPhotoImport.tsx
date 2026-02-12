@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
 import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -41,9 +42,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Default to first owned collection, or first collection if none owned
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setHookCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
 
@@ -376,7 +375,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
           <select
             value={selectedCollectionId}
             onChange={(e) => {
-              setSelectedCollectionId(e.target.value);
+              setHookCollectionId(e.target.value);
               // Reset matches when collection changes
               setMatches([]);
               setStep('select');

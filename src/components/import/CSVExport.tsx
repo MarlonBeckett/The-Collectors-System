@@ -13,6 +13,7 @@ import {
   ArrowDownTrayIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -34,9 +35,7 @@ export function CSVExport({ collections }: CSVExportProps) {
     encodeStatusInNotes: true,
   });
 
-  // Default to first owned collection, or first collection if none owned
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
 

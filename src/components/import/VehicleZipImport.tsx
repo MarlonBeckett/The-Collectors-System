@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { ArchiveBoxIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { DocumentType, ServiceCategory } from '@/types/database';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
   id: string;
@@ -109,8 +110,7 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
 
   const zipRef = useRef<JSZip | null>(null);
 
-  const defaultCollection = collections.find(c => c.is_owner) || collections[0];
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>(defaultCollection?.id || '');
+  const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const supabase = createClient();
   const router = useRouter();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle, MotorcycleStatus, VehicleType } from '@/types/database';
@@ -8,6 +8,7 @@ import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { PhotoUploader } from '@/components/photos/PhotoUploader';
 import { CreatePhotoUploader, StagedPhoto } from '@/components/photos/CreatePhotoUploader';
+import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface EditableCollection {
   id: string;
@@ -42,9 +43,10 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
   const router = useRouter();
   const supabase = createClient();
 
-  // For create mode: use first collection from the list if available
-  const defaultCollectionId = collectionId || (collections && collections.length > 0 ? collections[0].id : null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(defaultCollectionId);
+  // For create mode: use persisted collection from localStorage; for edit mode use provided collectionId
+  const [hookCollectionId, setHookCollectionId] = useSelectedCollection(collections || []);
+  const selectedCollectionId = collectionId || hookCollectionId || null;
+  const setSelectedCollectionId = (id: string) => setHookCollectionId(id);
 
   const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle?.vehicle_type || 'car');
   const [make, setMake] = useState(vehicle?.make || '');
