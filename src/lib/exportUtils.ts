@@ -1,4 +1,5 @@
 import { Motorcycle, VehicleDocument, ServiceRecord, MileageHistory } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import Papa from 'papaparse';
 
 export interface ExportOptions {
@@ -7,9 +8,9 @@ export interface ExportOptions {
 }
 
 export interface ExportRow {
-  name: string;
   make: string;
   model: string;
+  sub_model: string;
   year: string;
   vehicle_type: string;
   vin: string;
@@ -52,10 +53,10 @@ export function formatVehicleForExport(
   }
 
   return {
-    name: vehicle.name || '',
-    make: vehicle.make || '',
-    model: vehicle.model || '',
-    year: vehicle.year?.toString() || '',
+    make: vehicle.make,
+    model: vehicle.model,
+    sub_model: vehicle.sub_model || '',
+    year: vehicle.year.toString(),
     vehicle_type: vehicle.vehicle_type || 'motorcycle',
     vin: vehicle.vin || '',
     plate_number: vehicle.plate_number || '',
@@ -90,9 +91,9 @@ export function generateCSV(
   return Papa.unparse(rows, {
     header: true,
     columns: [
-      'name',
       'make',
       'model',
+      'sub_model',
       'year',
       'vehicle_type',
       'vin',
@@ -191,6 +192,7 @@ export interface ComprehensiveExportRow {
   vehicle_name: string;
   make: string;
   model: string;
+  sub_model: string;
   year: string;
   vehicle_type: string;
   vin: string;
@@ -229,6 +231,7 @@ const COMPREHENSIVE_COLUMNS: (keyof ComprehensiveExportRow)[] = [
   'vehicle_name',
   'make',
   'model',
+  'sub_model',
   'year',
   'vehicle_type',
   'vin',
@@ -266,7 +269,7 @@ function emptyRow(vehicleName: string, recordType: string): ComprehensiveExportR
   const row: ComprehensiveExportRow = {
     record_type: recordType,
     vehicle_name: vehicleName,
-    make: '', model: '', year: '', vehicle_type: '', vin: '', plate_number: '',
+    make: '', model: '', sub_model: '', year: '', vehicle_type: '', vin: '', plate_number: '',
     mileage: '', tab_expiration: '', status: '', notes: '',
     purchase_price: '', purchase_date: '', nickname: '', maintenance_notes: '',
     estimated_value: '', sale_info_type: '', sale_info_date: '', sale_info_amount: '', sale_info_notes: '',
@@ -286,16 +289,17 @@ export function generateComprehensiveCSV(
   options: ExportOptions
 ): string {
   const filtered = filterVehiclesForExport(vehicles, options);
-  const filteredNames = new Set(filtered.map((v) => v.name));
 
   const rows: ComprehensiveExportRow[] = [];
 
   for (const vehicle of filtered) {
     // Vehicle row
-    const vRow = emptyRow(vehicle.name, 'vehicle');
-    vRow.make = vehicle.make || '';
-    vRow.model = vehicle.model || '';
-    vRow.year = vehicle.year?.toString() || '';
+    const vehicleDisplayName = getVehicleDisplayName(vehicle);
+    const vRow = emptyRow(vehicleDisplayName, 'vehicle');
+    vRow.make = vehicle.make;
+    vRow.model = vehicle.model;
+    vRow.sub_model = vehicle.sub_model || '';
+    vRow.year = vehicle.year.toString();
     vRow.vehicle_type = vehicle.vehicle_type || 'motorcycle';
     vRow.vin = vehicle.vin || '';
     vRow.plate_number = vehicle.plate_number || '';
@@ -317,9 +321,9 @@ export function generateComprehensiveCSV(
     rows.push(vRow);
 
     // Service record rows for this vehicle
-    const vehicleServices = serviceRecords.filter((sr) => sr.vehicle_name === vehicle.name);
+    const vehicleServices = serviceRecords.filter((sr) => sr.vehicle_name === vehicleDisplayName);
     for (const sr of vehicleServices) {
-      const sRow = emptyRow(vehicle.name, 'service');
+      const sRow = emptyRow(vehicleDisplayName, 'service');
       sRow.service_date = sr.service_date || '';
       sRow.service_title = sr.title || '';
       sRow.service_description = sr.description || '';
@@ -332,9 +336,9 @@ export function generateComprehensiveCSV(
     }
 
     // Document rows for this vehicle
-    const vehicleDocs = documents.filter((d) => d.vehicle_name === vehicle.name);
+    const vehicleDocs = documents.filter((d) => d.vehicle_name === vehicleDisplayName);
     for (const doc of vehicleDocs) {
-      const dRow = emptyRow(vehicle.name, 'document');
+      const dRow = emptyRow(vehicleDisplayName, 'document');
       dRow.document_title = doc.title || '';
       dRow.document_type = doc.document_type || '';
       dRow.document_expiration = doc.expiration_date || '';
@@ -345,9 +349,9 @@ export function generateComprehensiveCSV(
     }
 
     // Mileage history rows for this vehicle
-    const vehicleMileage = mileageHistory.filter((m) => m.vehicle_name === vehicle.name);
+    const vehicleMileage = mileageHistory.filter((m) => m.vehicle_name === vehicleDisplayName);
     for (const m of vehicleMileage) {
-      const mRow = emptyRow(vehicle.name, 'mileage');
+      const mRow = emptyRow(vehicleDisplayName, 'mileage');
       mRow.mileage = m.mileage?.toString() || '';
       mRow.recorded_date = m.recorded_date || '';
       mRow.notes = m.notes || '';

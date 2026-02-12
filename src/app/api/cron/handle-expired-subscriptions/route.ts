@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { FREE_VEHICLE_LIMIT } from '@/lib/subscription';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 interface ExpiredSubscription {
   id: string;
@@ -14,7 +15,10 @@ interface UserCollection {
 
 interface Vehicle {
   id: string;
-  name: string;
+  make: string;
+  model: string;
+  sub_model: string | null;
+  year: number;
   created_at: string;
 }
 
@@ -114,7 +118,7 @@ export async function GET(request: Request) {
           // Get all vehicles in user's collections, ordered by created_at DESC
           const { data: vehicles } = await supabaseAdmin
             .from('motorcycles')
-            .select('id, name, created_at')
+            .select('id, make, model, sub_model, year, created_at')
             .in('collection_id', collectionIds)
             .order('created_at', { ascending: false }) as { data: Vehicle[] | null };
 
@@ -127,7 +131,7 @@ export async function GET(request: Request) {
             deletedCount = vehiclesToDelete.length;
 
             for (const vehicle of vehiclesToDelete) {
-              deletedVehicleNames.push(vehicle.name);
+              deletedVehicleNames.push(getVehicleDisplayName(vehicle));
 
               // Delete photos from storage first
               const { data: photos } = await supabaseAdmin

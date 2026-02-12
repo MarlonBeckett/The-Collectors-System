@@ -21,9 +21,9 @@ export interface VehicleContext {
   id: string;
   name: string;
   vehicleType: string;
-  year: number | null;
-  make: string | null;
-  model: string | null;
+  year: number;
+  make: string;
+  model: string;
   nickname: string | null;
 }
 

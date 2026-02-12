@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Motorcycle, VehicleType } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { ExpirationIndicator } from './ExpirationIndicator';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -32,7 +33,7 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-lg text-card-foreground truncate">
-              {vehicle.name}
+              {getVehicleDisplayName(vehicle)}
             </h3>
             <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground">
               {vehicleTypeLabels[vehicleType]}
@@ -41,21 +42,6 @@ export function VehicleCard({ vehicle }: VehicleCardProps) {
           {vehicle.nickname && (
             <p className="text-sm text-muted-foreground italic">&ldquo;{vehicle.nickname}&rdquo;</p>
           )}
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            {vehicle.make && <span>{vehicle.make}</span>}
-            {vehicle.model && (
-              <>
-                {vehicle.make && <span>·</span>}
-                <span>{vehicle.model}</span>
-              </>
-            )}
-            {vehicle.year && (
-              <>
-                {(vehicle.make || vehicle.model) && <span>·</span>}
-                <span>{vehicle.year}</span>
-              </>
-            )}
-          </div>
         </div>
 
         {vehicle.status === 'active' && (

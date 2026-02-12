@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 interface UserCollection {
@@ -126,7 +127,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
       let bestConfidence = 0;
 
       for (const bike of bikes) {
-        const confidence = fuzzyMatch(folderName, bike.name);
+        const confidence = fuzzyMatch(folderName, getVehicleDisplayName(bike));
         if (confidence > bestConfidence) {
           bestConfidence = confidence;
           bestMatch = bike;
@@ -505,7 +506,7 @@ export function BulkPhotoImport({ collections, onImportingChange }: BulkPhotoImp
                     <option value="">-- Select vehicle --</option>
                     {bikes.map((bike) => (
                       <option key={bike.id} value={bike.id}>
-                        {bike.name} {bike.year ? `(${bike.year})` : ''}
+                        {getVehicleDisplayName(bike)}
                       </option>
                     ))}
                   </select>

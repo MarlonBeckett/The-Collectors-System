@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Motorcycle, Photo, SaleInfo, VehicleType, MileageHistory, ServiceRecord, ServiceRecordReceipt, VehicleDocument } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { VehicleDetailSkeleton } from '@/components/ui/VehicleDetailSkeleton';
 import { PhotoGallery } from '@/components/photos/PhotoGallery';
 import { formatSaleInfo } from '@/lib/statusParser';
@@ -95,7 +96,7 @@ export function VehicleDetailContent({
           {/* Photo Gallery */}
           <PhotoGallery
             photos={photos}
-            motorcycleName={vehicle.name}
+            motorcycleName={getVehicleDisplayName(vehicle)}
             imageUrls={imageUrls}
             onFirstImageLoad={handleFirstImageLoad}
           />
@@ -105,7 +106,7 @@ export function VehicleDetailContent({
             {/* Title */}
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold text-foreground">{vehicle.name}</h1>
+                <h1 className="text-2xl font-bold text-foreground">{getVehicleDisplayName(vehicle)}</h1>
                 <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground">
                   {vehicleTypeLabels[vehicle.vehicle_type || 'motorcycle']}
                 </span>
@@ -113,21 +114,6 @@ export function VehicleDetailContent({
               {vehicle.nickname && (
                 <p className="text-lg text-muted-foreground italic">&ldquo;{vehicle.nickname}&rdquo;</p>
               )}
-              <div className="flex items-center gap-2 text-lg text-muted-foreground mt-1">
-                {vehicle.make && <span>{vehicle.make}</span>}
-                {vehicle.model && (
-                  <>
-                    {vehicle.make && <span>·</span>}
-                    <span>{vehicle.model}</span>
-                  </>
-                )}
-                {vehicle.year && (
-                  <>
-                    {(vehicle.make || vehicle.model) && <span>·</span>}
-                    <span>{vehicle.year}</span>
-                  </>
-                )}
-              </div>
 
               {/* Sale Info */}
               {vehicle.sale_info && (

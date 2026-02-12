@@ -5,6 +5,7 @@ import { daysUntilExpiration } from '@/lib/dateUtils';
 import { classifyIntentFast, findVehicleContext } from '@/lib/chat/intentClassifier';
 import { performResearch, formatResearchResponse } from '@/lib/chat/researchOrchestrator';
 import { ResearchResult } from '@/types/research';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       .from('motorcycles')
       .select('*')
       .eq('collection_id', collectionId)
-      .order('name');
+      .order('make');
 
     // Get recent chat history for this session
     const { data: recentMessages } = await supabase
@@ -85,9 +86,9 @@ export async function POST(request: NextRequest) {
 - Sold/traded: ${soldVehicles.length}
 
 ### Vehicles Needing Attention
-${expiredTabs.length > 0 ? `- EXPIRED TABS (${expiredTabs.length}): ${expiredTabs.map(v => v.name).join(', ')}` : '- No expired tabs'}
-${expiringTabs.length > 0 ? `- Tabs expiring soon (${expiringTabs.length}): ${expiringTabs.map(v => v.name).join(', ')}` : ''}
-${needsMaintenance.length > 0 ? `- Needs maintenance (${needsMaintenance.length}): ${needsMaintenance.map(v => `${v.name}${v.maintenance_notes ? ` (${v.maintenance_notes})` : ''}`).join(', ')}` : '- No maintenance needed'}
+${expiredTabs.length > 0 ? `- EXPIRED TABS (${expiredTabs.length}): ${expiredTabs.map(v => getVehicleDisplayName(v)).join(', ')}` : '- No expired tabs'}
+${expiringTabs.length > 0 ? `- Tabs expiring soon (${expiringTabs.length}): ${expiringTabs.map(v => getVehicleDisplayName(v)).join(', ')}` : ''}
+${needsMaintenance.length > 0 ? `- Needs maintenance (${needsMaintenance.length}): ${needsMaintenance.map(v => `${getVehicleDisplayName(v)}${v.maintenance_notes ? ` (${v.maintenance_notes})` : ''}`).join(', ')}` : '- No maintenance needed'}
 
 ### Vehicle Details
 ${vehicles.map(v => {
@@ -97,9 +98,8 @@ ${vehicles.map(v => {
     tabDays <= 30 ? `Expires in ${tabDays} days` : `Valid (${tabDays} days)`;
 
   return `
-**${v.name}** (${v.status})
+**${getVehicleDisplayName(v)}** (${v.status})
 - Type: ${v.vehicle_type || 'motorcycle'}
-- Year/Make/Model: ${[v.year, v.make, v.model].filter(Boolean).join(' ') || 'Not specified'}
 ${v.nickname ? `- Nickname: "${v.nickname}"` : ''}
 ${v.mileage ? `- Mileage: ${v.mileage}` : ''}
 ${v.plate_number ? `- Plate: ${v.plate_number}` : ''}
@@ -130,9 +130,9 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
       id: string;
       name: string;
       vehicleType: string;
-      year: number | null;
-      make: string | null;
-      model: string | null;
+      year: number;
+      make: string;
+      model: string;
       nickname: string | null;
     } | null = null;
 
@@ -141,11 +141,12 @@ ${v.maintenance_notes ? `- Maintenance notes: ${v.maintenance_notes}` : ''}`;
       // First check the current message, then check recent chat history
       const vehicleList = vehicles.map(v => ({
         id: v.id,
-        name: v.name,
+        name: getVehicleDisplayName(v),
         vehicle_type: v.vehicle_type,
         year: v.year,
         make: v.make,
         model: v.model,
+        sub_model: v.sub_model,
         nickname: v.nickname,
       }));
 

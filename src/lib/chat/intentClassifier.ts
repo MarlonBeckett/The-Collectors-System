@@ -172,9 +172,10 @@ export function findVehicleContext(
     id: string;
     name: string;
     vehicle_type: string;
-    year: number | null;
-    make: string | null;
-    model: string | null;
+    year: number;
+    make: string;
+    model: string;
+    sub_model?: string | null;
     nickname: string | null;
   }>
 ): VehicleContext | undefined {
@@ -182,7 +183,7 @@ export function findVehicleContext(
 
   const searchTerm = vehicleMentioned.toLowerCase();
 
-  // Try exact name match first
+  // Try exact display name match first
   let match = vehicles.find(
     (v) => v.name.toLowerCase() === searchTerm || v.nickname?.toLowerCase() === searchTerm
   );
@@ -190,7 +191,7 @@ export function findVehicleContext(
   // Try exact model match (most specific)
   if (!match) {
     match = vehicles.find(
-      (v) => v.model && searchTerm.includes(v.model.toLowerCase())
+      (v) => searchTerm.includes(v.model.toLowerCase())
     );
   }
 
@@ -201,7 +202,7 @@ export function findVehicleContext(
     );
   }
 
-  // Try name contains search term or vice versa
+  // Try display name contains search term or vice versa
   if (!match) {
     match = vehicles.find(
       (v) =>
@@ -213,18 +214,15 @@ export function findVehicleContext(
   // Try make + model combination in search term (e.g., "KTM 300XC")
   if (!match) {
     match = vehicles.find((v) => {
-      if (v.make && v.model) {
-        const makeModel = `${v.make} ${v.model}`.toLowerCase();
-        return searchTerm.includes(makeModel) || searchTerm.includes(`${v.make.toLowerCase()} ${v.model.toLowerCase()}`);
-      }
-      return false;
+      const makeModel = `${v.make} ${v.model}`.toLowerCase();
+      return searchTerm.includes(makeModel) || searchTerm.includes(`${v.make.toLowerCase()} ${v.model.toLowerCase()}`);
     });
   }
 
   // Last resort: make-only match, but only if there's exactly one vehicle of that make
   if (!match) {
     const makeMatches = vehicles.filter(
-      (v) => v.make && searchTerm.includes(v.make.toLowerCase())
+      (v) => searchTerm.includes(v.make.toLowerCase())
     );
     if (makeMatches.length === 1) {
       match = makeMatches[0];

@@ -6,6 +6,7 @@ import { BikeCard } from './BikeCard';
 import { SearchBar } from './SearchBar';
 import { QuickStats } from './QuickStats';
 import { daysUntilExpiration } from '@/lib/dateUtils';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 interface BikeListProps {
   bikes: Motorcycle[];
@@ -36,8 +37,8 @@ export function BikeList({ bikes }: BikeListProps) {
         return daysA - daysB;
       }
 
-      // For inactive bikes, sort by name
-      return a.name.localeCompare(b.name);
+      // For inactive bikes, sort by display name
+      return getVehicleDisplayName(a).localeCompare(getVehicleDisplayName(b));
     });
   }, [bikes]);
 
@@ -53,10 +54,13 @@ export function BikeList({ bikes }: BikeListProps) {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(bike =>
-        bike.name.toLowerCase().includes(query) ||
+        bike.make.toLowerCase().includes(query) ||
+        bike.model.toLowerCase().includes(query) ||
+        bike.sub_model?.toLowerCase().includes(query) ||
+        bike.nickname?.toLowerCase().includes(query) ||
         bike.plate_number?.toLowerCase().includes(query) ||
         bike.vin?.toLowerCase().includes(query) ||
-        bike.year?.toString().includes(query)
+        bike.year.toString().includes(query)
       );
     }
 

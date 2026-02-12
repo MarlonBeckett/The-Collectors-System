@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Motorcycle, MotorcycleStatus } from '@/types/database';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { PhotoUploader } from '@/components/photos/PhotoUploader';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 interface BikeFormProps {
   bike?: Motorcycle;
@@ -16,7 +17,9 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [name, setName] = useState(bike?.name || '');
+  const [make, setMake] = useState(bike?.make || '');
+  const [model, setModel] = useState(bike?.model || '');
+  const [subModel, setSubModel] = useState(bike?.sub_model || '');
   const [year, setYear] = useState(bike?.year?.toString() || '');
   const [vin, setVin] = useState(bike?.vin || '');
   const [plateNumber, setPlateNumber] = useState(bike?.plate_number || '');
@@ -41,8 +44,10 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
     try {
       const parsedDate = parseFlexibleDate(tabExpiration);
       const bikeData = {
-        name,
-        year: year ? parseInt(year) : null,
+        make,
+        model,
+        sub_model: subModel || null,
+        year: parseInt(year),
         vin: vin || null,
         plate_number: plateNumber || null,
         mileage: mileage || null,
@@ -105,32 +110,64 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
         </div>
       )}
 
-      {/* Name */}
+      {/* Make */}
       <div>
-        <label htmlFor="name" className="block text-sm font-medium mb-2">
-          Name <span className="text-destructive">*</span>
+        <label htmlFor="make" className="block text-sm font-medium mb-2">
+          Make <span className="text-destructive">*</span>
         </label>
         <input
-          id="name"
+          id="make"
           type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={make}
+          onChange={(e) => setMake(e.target.value)}
           required
           className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="e.g., KTM Super Duke 990"
+          placeholder="e.g., KTM"
+        />
+      </div>
+
+      {/* Model */}
+      <div>
+        <label htmlFor="model" className="block text-sm font-medium mb-2">
+          Model <span className="text-destructive">*</span>
+        </label>
+        <input
+          id="model"
+          type="text"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          required
+          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          placeholder="e.g., Super Duke 990"
+        />
+      </div>
+
+      {/* Sub Model */}
+      <div>
+        <label htmlFor="subModel" className="block text-sm font-medium mb-2">
+          Sub Model
+        </label>
+        <input
+          id="subModel"
+          type="text"
+          value={subModel}
+          onChange={(e) => setSubModel(e.target.value)}
+          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+          placeholder="e.g., Adventure"
         />
       </div>
 
       {/* Year */}
       <div>
         <label htmlFor="year" className="block text-sm font-medium mb-2">
-          Year
+          Year <span className="text-destructive">*</span>
         </label>
         <input
           id="year"
           type="number"
           value={year}
           onChange={(e) => setYear(e.target.value)}
+          required
           min="1900"
           max="2099"
           className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
@@ -244,7 +281,7 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
       <div className="flex gap-3">
         <button
           type="submit"
-          disabled={loading || !name}
+          disabled={loading || !make || !model || !year}
           className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
           {loading ? 'Saving...' : mode === 'create' ? 'Add Motorcycle' : 'Save Changes'}
@@ -273,7 +310,7 @@ export function BikeForm({ bike, mode }: BikeFormProps) {
           ) : (
             <div className="bg-destructive/10 border border-destructive p-4">
               <p className="text-destructive font-medium mb-3">
-                Are you sure you want to delete &ldquo;{bike.name}&rdquo;? This cannot be undone.
+                Are you sure you want to delete &ldquo;{getVehicleDisplayName(bike)}&rdquo;? This cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { ExpirationIndicator } from './ExpirationIndicator';
 import { formatDate } from '@/lib/dateUtils';
 
@@ -22,11 +23,8 @@ export function BikeCard({ bike }: BikeCardProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-lg text-card-foreground truncate">
-            {bike.name}
+            {getVehicleDisplayName(bike)}
           </h3>
-          {bike.year && (
-            <p className="text-sm text-muted-foreground">{bike.year}</p>
-          )}
         </div>
 
         {bike.status === 'active' && (

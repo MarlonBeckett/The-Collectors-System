@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle, VehicleDocument } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { matchFileToRecord } from '@/lib/importFileMatcher';
 import { FolderOpenIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
@@ -156,7 +157,7 @@ export function BulkDocumentImport({ collections, onImportingChange }: BulkDocum
       let bestConfidence = 0;
 
       for (const vehicle of vehicles) {
-        const confidence = fuzzyMatch(folderName, vehicle.name);
+        const confidence = fuzzyMatch(folderName, getVehicleDisplayName(vehicle));
         if (confidence > bestConfidence) {
           bestConfidence = confidence;
           bestMatch = vehicle;
@@ -573,7 +574,7 @@ export function BulkDocumentImport({ collections, onImportingChange }: BulkDocum
                     <option value="">-- Select vehicle --</option>
                     {vehicles.map((vehicle) => (
                       <option key={vehicle.id} value={vehicle.id}>
-                        {vehicle.name} {vehicle.year ? `(${vehicle.year})` : ''}
+                        {getVehicleDisplayName(vehicle)}
                       </option>
                     ))}
                   </select>

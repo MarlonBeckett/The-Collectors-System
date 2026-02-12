@@ -27,11 +27,11 @@ export interface SaleInfo {
 
 export interface Motorcycle {
   id: string;
-  name: string;
-  make: string | null;
-  model: string | null;
+  make: string;
+  model: string;
+  sub_model: string | null;
   nickname: string | null;
-  year: number | null;
+  year: number;
   vin: string | null;
   plate_number: string | null;
   mileage: string | null;
@@ -227,7 +227,7 @@ export interface Database {
       motorcycles: {
         Row: Motorcycle;
         Insert: Omit<Motorcycle, 'id' | 'created_at' | 'updated_at' | 'vehicle_type'> & { id?: string; vehicle_type?: VehicleType };
-        Update: Partial<Omit<Motorcycle, 'id' | 'created_at' | 'updated_at'>>;
+        Update: Partial<Omit<Motorcycle, 'id' | 'created_at' | 'updated_at'>> & { name?: never };
       };
       photos: {
         Row: Photo;

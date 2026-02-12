@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { daysUntilExpiration } from '@/lib/dateUtils';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 interface SuggestionContext {
   vehicles: Motorcycle[];
@@ -28,15 +29,15 @@ function generateSuggestions(context: SuggestionContext): string[] {
   // Priority 1: Urgent attention items
   if (expiredTabs.length > 0) {
     const vehicle = expiredTabs[0];
-    suggestions.push(`My ${vehicle.name} tabs are expired - what should I do?`);
+    suggestions.push(`My ${getVehicleDisplayName(vehicle)} tabs are expired - what should I do?`);
   }
 
   if (needsMaintenance.length > 0) {
     const vehicle = needsMaintenance[0];
     if (vehicle.maintenance_notes) {
-      suggestions.push(`Help me fix the ${vehicle.name}: ${vehicle.maintenance_notes}`);
+      suggestions.push(`Help me fix the ${getVehicleDisplayName(vehicle)}: ${vehicle.maintenance_notes}`);
     } else {
-      suggestions.push(`What maintenance does my ${vehicle.name} need?`);
+      suggestions.push(`What maintenance does my ${getVehicleDisplayName(vehicle)} need?`);
     }
   }
 
@@ -44,7 +45,7 @@ function generateSuggestions(context: SuggestionContext): string[] {
   if (expiringTabs.length > 0 && suggestions.length < 2) {
     const vehicle = expiringTabs[0];
     const days = daysUntilExpiration(vehicle.tab_expiration);
-    suggestions.push(`My ${vehicle.name} tabs expire in ${days} days - remind me what I need`);
+    suggestions.push(`My ${getVehicleDisplayName(vehicle)} tabs expire in ${days} days - remind me what I need`);
   }
 
   // Priority 3: Vehicle-specific helpful suggestions
@@ -58,25 +59,25 @@ function generateSuggestions(context: SuggestionContext): string[] {
       // Generate contextual product questions based on vehicle type
       const productQuestions: Record<string, string[]> = {
         motorcycle: [
-          `What battery should I get for my ${randomVehicle.name}?`,
-          `What are the best tires for my ${randomVehicle.name}?`,
-          `What oil should I use in my ${randomVehicle.name}?`,
+          `What battery should I get for my ${getVehicleDisplayName(randomVehicle)}?`,
+          `What are the best tires for my ${getVehicleDisplayName(randomVehicle)}?`,
+          `What oil should I use in my ${getVehicleDisplayName(randomVehicle)}?`,
         ],
         car: [
-          `What are the best tires for my ${randomVehicle.name}?`,
-          `What oil should I use in my ${randomVehicle.name}?`,
-          `What battery fits my ${randomVehicle.name}?`,
+          `What are the best tires for my ${getVehicleDisplayName(randomVehicle)}?`,
+          `What oil should I use in my ${getVehicleDisplayName(randomVehicle)}?`,
+          `What battery fits my ${getVehicleDisplayName(randomVehicle)}?`,
         ],
         boat: [
-          `What maintenance does my ${randomVehicle.name} need before the season?`,
-          `What battery should I get for my ${randomVehicle.name}?`,
+          `What maintenance does my ${getVehicleDisplayName(randomVehicle)} need before the season?`,
+          `What battery should I get for my ${getVehicleDisplayName(randomVehicle)}?`,
         ],
         trailer: [
-          `What tires should I get for my ${randomVehicle.name}?`,
-          `What maintenance does my ${randomVehicle.name} need?`,
+          `What tires should I get for my ${getVehicleDisplayName(randomVehicle)}?`,
+          `What maintenance does my ${getVehicleDisplayName(randomVehicle)} need?`,
         ],
         other: [
-          `What maintenance does my ${randomVehicle.name} need?`,
+          `What maintenance does my ${getVehicleDisplayName(randomVehicle)} need?`,
         ],
       };
 

@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
 interface ExpiringBike {
   id: string;
-  name: string;
+  make: string;
+  model: string;
+  sub_model: string | null;
+  year: number;
   plate_number: string | null;
   tab_expiration: string;
   vehicle_type: string | null;
@@ -81,7 +85,7 @@ export async function GET(request: Request) {
       // Get bikes expiring on this date
       const { data: expiringBikes } = await supabaseAdmin
         .from('motorcycles')
-        .select('id, name, plate_number, tab_expiration, vehicle_type')
+        .select('id, make, model, sub_model, year, plate_number, tab_expiration, vehicle_type')
         .eq('tab_expiration', targetDate)
         .eq('status', 'active');
 
@@ -137,7 +141,7 @@ export async function GET(request: Request) {
       const bikeList = bikes
         .map(
           (b) =>
-            `<li><strong>${b.name}</strong>${b.plate_number ? ` (Plate: ${b.plate_number})` : ''}</li>`
+            `<li><strong>${getVehicleDisplayName(b)}</strong>${b.plate_number ? ` (Plate: ${b.plate_number})` : ''}</li>`
         )
         .join('');
 

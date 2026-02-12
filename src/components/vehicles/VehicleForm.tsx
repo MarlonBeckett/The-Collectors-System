@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle, MotorcycleStatus, VehicleType } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { PhotoUploader } from '@/components/photos/PhotoUploader';
 import { CreatePhotoUploader, StagedPhoto } from '@/components/photos/CreatePhotoUploader';
@@ -22,12 +23,20 @@ interface VehicleFormProps {
 }
 
 const vehicleTypes: { value: VehicleType; label: string }[] = [
-  { value: 'motorcycle', label: 'Motorcycle' },
   { value: 'car', label: 'Car' },
+  { value: 'motorcycle', label: 'Motorcycle' },
   { value: 'boat', label: 'Boat' },
   { value: 'trailer', label: 'Trailer' },
   { value: 'other', label: 'Other' },
 ];
+
+const placeholders: Record<VehicleType, { make: string; model: string; subModel: string; nickname: string }> = {
+  motorcycle: { make: 'e.g., BMW', model: 'e.g., R1250GS', subModel: 'e.g., Adventure', nickname: 'e.g., Bumblebee' },
+  car: { make: 'e.g., Ford', model: 'e.g., Mustang', subModel: 'e.g., GT', nickname: 'e.g., Ol\' Reliable' },
+  boat: { make: 'e.g., Boston Whaler', model: 'e.g., Montauk', subModel: 'e.g., 170', nickname: 'e.g., Sea Breeze' },
+  trailer: { make: 'e.g., Big Tex', model: 'e.g., 70PI', subModel: 'e.g., 16ft', nickname: 'e.g., The Hauler' },
+  other: { make: 'e.g., Honda', model: 'e.g., HRX217', subModel: '', nickname: 'e.g., Lawn Mower, Generator' },
+};
 
 export function VehicleForm({ vehicle, mode, collectionId, collections }: VehicleFormProps) {
   const router = useRouter();
@@ -40,7 +49,7 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
   const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle?.vehicle_type || 'motorcycle');
   const [make, setMake] = useState(vehicle?.make || '');
   const [model, setModel] = useState(vehicle?.model || '');
-  const [name, setName] = useState(vehicle?.name || '');
+  const [subModel, setSubModel] = useState(vehicle?.sub_model || '');
   const [nickname, setNickname] = useState(vehicle?.nickname || '');
   const [year, setYear] = useState(vehicle?.year?.toString() || '');
   const [vin, setVin] = useState(vehicle?.vin || '');
@@ -78,12 +87,13 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
       const mileageNum = mileage ? parseInt(mileage.replace(/,/g, '')) : null;
       const purchasePriceNum = purchasePrice ? parseFloat(purchasePrice.replace(/,/g, '')) : null;
 
+      const isOtherType = vehicleType === 'other';
       const vehicleData = {
-        make: make || null,
-        model: model || null,
-        name,
+        make: isOtherType ? (make || '') : make,
+        model: isOtherType ? (model || '') : model,
+        sub_model: subModel || null,
         nickname: nickname || null,
-        year: year ? parseInt(year) : null,
+        year: isOtherType ? (year ? parseInt(year) : 0) : parseInt(year),
         vin: vin || null,
         plate_number: plateNumber || null,
         mileage: mileageNum ? `${mileageNum.toLocaleString()}` : null,
@@ -254,86 +264,156 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
         </div>
       </div>
 
-      {/* Make, Model, Year - on same row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Make */}
-        <div>
-          <label htmlFor="make" className="block text-sm font-medium mb-2">
-            Make
-          </label>
-          <input
-            id="make"
-            type="text"
-            value={make}
-            onChange={(e) => setMake(e.target.value)}
-            className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="e.g., BMW"
-          />
-        </div>
+      {/* For "other" type: only nickname is required */}
+      {vehicleType === 'other' ? (
+        <>
+          {/* Nickname (required for "other") */}
+          <div>
+            <label htmlFor="nickname" className="block text-sm font-medium mb-2">
+              Nickname <span className="text-destructive">*</span>
+            </label>
+            <input
+              id="nickname"
+              type="text"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              required
+              className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder={placeholders[vehicleType].nickname}
+            />
+          </div>
 
-        {/* Model */}
-        <div>
-          <label htmlFor="model" className="block text-sm font-medium mb-2">
-            Model
-          </label>
-          <input
-            id="model"
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="e.g., R1250GS"
-          />
-        </div>
+          {/* Optional Make, Model, Year for "other" */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="make" className="block text-sm font-medium mb-2">
+                Make
+              </label>
+              <input
+                id="make"
+                type="text"
+                value={make}
+                onChange={(e) => setMake(e.target.value)}
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].make}
+              />
+            </div>
 
-        {/* Year */}
-        <div>
-          <label htmlFor="year" className="block text-sm font-medium mb-2">
-            Year
-          </label>
-          <input
-            id="year"
-            type="number"
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-            min="1900"
-            max="2099"
-            className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="2023"
-          />
-        </div>
-      </div>
+            <div>
+              <label htmlFor="model" className="block text-sm font-medium mb-2">
+                Model
+              </label>
+              <input
+                id="model"
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].model}
+              />
+            </div>
 
-      {/* Name */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium mb-2">
-          Name <span className="text-destructive">*</span>
-        </label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="e.g., KTM Super Duke 990"
-        />
-      </div>
+            <div>
+              <label htmlFor="year" className="block text-sm font-medium mb-2">
+                Year
+              </label>
+              <input
+                id="year"
+                type="number"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                min="1900"
+                max="2099"
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="2023"
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Make, Model, Year - required for standard vehicle types */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="make" className="block text-sm font-medium mb-2">
+                Make <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="make"
+                type="text"
+                value={make}
+                onChange={(e) => setMake(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].make}
+              />
+            </div>
 
-      {/* Nickname */}
-      <div>
-        <label htmlFor="nickname" className="block text-sm font-medium mb-2">
-          Nickname
-        </label>
-        <input
-          id="nickname"
-          type="text"
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="e.g., Bumblebee"
-        />
-      </div>
+            <div>
+              <label htmlFor="model" className="block text-sm font-medium mb-2">
+                Model <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="model"
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].model}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="year" className="block text-sm font-medium mb-2">
+                Year <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="year"
+                type="number"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                required
+                min="1900"
+                max="2099"
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="2023"
+              />
+            </div>
+          </div>
+
+          {/* Sub-model and Nickname on same row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="subModel" className="block text-sm font-medium mb-2">
+                Sub-model
+              </label>
+              <input
+                id="subModel"
+                type="text"
+                value={subModel}
+                onChange={(e) => setSubModel(e.target.value)}
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].subModel}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="nickname" className="block text-sm font-medium mb-2">
+                Nickname
+              </label>
+              <input
+                id="nickname"
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={placeholders[vehicleType].nickname}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       {/* VIN */}
       <div>
@@ -502,7 +582,7 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
       <div className="flex gap-3">
         <button
           type="submit"
-          disabled={loading || !name}
+          disabled={loading || (vehicleType === 'other' ? !nickname : (!make || !model || !year))}
           className="flex-1 min-h-[44px] py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
         >
           {loading
@@ -535,7 +615,7 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
           ) : (
             <div className="bg-destructive/10 border border-destructive p-4">
               <p className="text-destructive font-medium mb-3">
-                Are you sure you want to delete &ldquo;{vehicle.name}&rdquo;? This cannot be undone.
+                Are you sure you want to delete &ldquo;{getVehicleDisplayName(vehicle)}&rdquo;? This cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button

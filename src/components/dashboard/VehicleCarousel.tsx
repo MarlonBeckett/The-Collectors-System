@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
@@ -74,9 +75,7 @@ export function VehicleCarousel({ vehicles, vehiclePhotoMap }: VehicleCarouselPr
   const currentVehicle = showcaseVehicles[currentIndex];
   const currentUrl = vehiclePhotoMap[currentVehicle.id];
 
-  const subtitle = [currentVehicle.year, currentVehicle.make, currentVehicle.model]
-    .filter(Boolean)
-    .join(' ');
+  const displayName = getVehicleDisplayName(currentVehicle);
 
   return (
     <div className="relative w-full overflow-hidden rounded-lg mb-4">
@@ -99,7 +98,7 @@ export function VehicleCarousel({ vehicles, vehiclePhotoMap }: VehicleCarouselPr
             <Image
               key={v.id}
               src={url}
-              alt={v.name}
+              alt={getVehicleDisplayName(v)}
               fill
               className={`object-cover transition-opacity duration-500 ${
                 isVisible ? 'opacity-100' : 'opacity-0'
@@ -114,10 +113,10 @@ export function VehicleCarousel({ vehicles, vehiclePhotoMap }: VehicleCarouselPr
         {/* Bottom gradient overlay with vehicle info */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pb-3 pt-16">
           <p className="text-white font-semibold text-lg leading-tight drop-shadow-sm">
-            {currentVehicle.name}
+            {displayName}
           </p>
-          {subtitle && (
-            <p className="text-white/80 text-sm drop-shadow-sm">{subtitle}</p>
+          {currentVehicle.nickname && (
+            <p className="text-white/80 text-sm drop-shadow-sm">&ldquo;{currentVehicle.nickname}&rdquo;</p>
           )}
         </div>
       </Link>

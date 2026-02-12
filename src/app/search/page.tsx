@@ -19,7 +19,7 @@ export default function SearchPage() {
       const { data } = await supabase
         .from('motorcycles')
         .select('*')
-        .order('name');
+        .order('make');
       if (data) setVehicles(data);
       setLoading(false);
     };
@@ -32,10 +32,13 @@ export default function SearchPage() {
     const q = query.toLowerCase();
     return vehicles.filter(
       (vehicle) =>
-        vehicle.name.toLowerCase().includes(q) ||
+        vehicle.make.toLowerCase().includes(q) ||
+        vehicle.model.toLowerCase().includes(q) ||
+        vehicle.sub_model?.toLowerCase().includes(q) ||
+        vehicle.nickname?.toLowerCase().includes(q) ||
         vehicle.plate_number?.toLowerCase().includes(q) ||
         vehicle.vin?.toLowerCase().includes(q) ||
-        vehicle.year?.toString().includes(q) ||
+        vehicle.year.toString().includes(q) ||
         vehicle.mileage?.toLowerCase().includes(q) ||
         vehicle.notes?.toLowerCase().includes(q)
     );

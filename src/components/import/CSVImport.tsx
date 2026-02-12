@@ -33,35 +33,35 @@ interface CSVRow {
 }
 
 interface ColumnMapping {
-  name?: string;
+  make?: string;
+  model?: string;
+  sub_model?: string;
   year?: string;
+  nickname?: string;
+  vehicle_type?: string;
   vin?: string;
   plate_number?: string;
   mileage?: string;
-  notes?: string;
   tab_expiration?: string;
-  make?: string;
-  model?: string;
-  nickname?: string;
-  vehicle_type?: string;
+  status?: string;
+  notes?: string;
   purchase_price?: string;
   purchase_date?: string;
-  status?: string;
   maintenance_notes?: string;
 }
 
 interface PreviewRow {
   original: CSVRow;
   mapped: {
-    name: string;
-    year: number | null;
+    make: string;
+    model: string;
+    sub_model: string | null;
+    year: number;
     vin: string | null;
     plate_number: string | null;
     mileage: string | null;
     notes: string | null;
     tab_expiration: string | null;
-    make: string | null;
-    model: string | null;
     nickname: string | null;
     vehicle_type: string;
     purchase_price: number | null;
@@ -122,10 +122,10 @@ interface VehicleZipFiles {
 }
 
 const fieldLabels: Record<keyof ColumnMapping, string> = {
-  name: 'Name (required)',
-  make: 'Make',
-  model: 'Model',
-  year: 'Year',
+  make: 'Make (required)',
+  model: 'Model (required)',
+  sub_model: 'Sub-model',
+  year: 'Year (required)',
   nickname: 'Nickname',
   vehicle_type: 'Vehicle Type',
   vin: 'VIN',
@@ -463,9 +463,9 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           setHeaders(fields);
 
           const autoMapping: ColumnMapping = {
-            name: 'vehicle_name',
             make: 'make',
             model: 'model',
+            sub_model: 'sub_model',
             year: 'year',
             nickname: 'nickname',
             vehicle_type: 'vehicle_type',
@@ -496,11 +496,11 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
         const autoMapping: ColumnMapping = {};
 
         const fieldPatterns: { field: keyof ColumnMapping; patterns: string[] }[] = [
-          { field: 'name', patterns: ['name', 'motorcycle', 'bike', 'vehicle', 'title'] },
           { field: 'make', patterns: ['make', 'manufacturer', 'brand'] },
           { field: 'model', patterns: ['model'] },
+          { field: 'sub_model', patterns: ['sub_model', 'submodel', 'sub model', 'trim', 'variant'] },
           { field: 'year', patterns: ['year', 'yr', 'model year'] },
-          { field: 'nickname', patterns: ['nickname', 'alias'] },
+          { field: 'nickname', patterns: ['nickname', 'alias', 'name', 'vehicle', 'title'] },
           { field: 'vehicle_type', patterns: ['vehicle_type', 'type', 'category'] },
           { field: 'vin', patterns: ['vin', 'vehicle identification'] },
           { field: 'plate_number', patterns: ['plate', 'license', 'tag', 'registration'] },
@@ -538,29 +538,30 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
   /** Build preview rows directly from comprehensive CSV vehicle rows (no column mapping needed) */
   function buildPreviewFromComprehensive(vehicleRows: CSVRow[]): PreviewRow[] {
     return vehicleRows.map((row) => {
-      const name = row.vehicle_name?.trim() || '';
+      const make = row.make?.trim() || '';
+      const model = row.model?.trim() || '';
 
-      if (!name) {
+      const yearStr = row.year?.trim();
+      let year = 0;
+      if (yearStr) {
+        const parsed = parseInt(yearStr);
+        if (!isNaN(parsed) && parsed >= 1900 && parsed <= 2099) year = parsed;
+      }
+
+      if (!make || !model || !year) {
         return {
           original: row,
           mapped: {
-            name: '', year: null, vin: null, plate_number: null, mileage: null,
-            notes: null, tab_expiration: null, make: null, model: null,
+            make, model, sub_model: null, year, vin: null, plate_number: null, mileage: null,
+            notes: null, tab_expiration: null,
             nickname: null, vehicle_type: 'motorcycle', purchase_price: null,
             purchase_date: null, status: 'active', sale_info: null,
             maintenance_notes: null, estimated_value: null,
             sale_info_type: null, sale_info_date: null, sale_info_amount: null, sale_info_notes: null,
           },
           valid: false,
-          error: 'Name is required',
+          error: 'Make, model, and year are required',
         };
-      }
-
-      const yearStr = row.year?.trim();
-      let year: number | null = null;
-      if (yearStr) {
-        const parsed = parseInt(yearStr);
-        if (!isNaN(parsed) && parsed >= 1900 && parsed <= 2099) year = parsed;
       }
 
       const ppStr = row.purchase_price?.trim();
@@ -609,15 +610,15 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       return {
         original: row,
         mapped: {
-          name,
+          make,
+          model,
+          sub_model: row.sub_model?.trim() || null,
           year,
           vin: row.vin?.trim() || null,
           plate_number: row.plate_number?.trim() || null,
           mileage: row.mileage?.trim() || null,
           notes: row.notes?.trim() || null,
           tab_expiration: formatDateForDB(tabExpDate),
-          make: row.make?.trim() || null,
-          model: row.model?.trim() || null,
           nickname: row.nickname?.trim() || null,
           vehicle_type: vehicleType,
           purchase_price: purchasePrice,
@@ -766,21 +767,31 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
     setLimitError(null);
 
     const previewRows: PreviewRow[] = csvData.map((row) => {
-      const name = mapping.name ? row[mapping.name]?.trim() : '';
+      const make = mapping.make ? row[mapping.make]?.trim() || '' : '';
+      const model = mapping.model ? row[mapping.model]?.trim() || '' : '';
 
-      if (!name) {
+      const yearStr = mapping.year ? row[mapping.year]?.trim() : null;
+      let year = 0;
+      if (yearStr) {
+        const parsed = parseInt(yearStr);
+        if (!isNaN(parsed) && parsed >= 1900 && parsed <= 2099) {
+          year = parsed;
+        }
+      }
+
+      if (!make || !model || !year) {
         return {
           original: row,
           mapped: {
-            name: '', year: null, vin: null, plate_number: null, mileage: null,
-            notes: null, tab_expiration: null, make: null, model: null,
+            make, model, sub_model: null, year, vin: null, plate_number: null, mileage: null,
+            notes: null, tab_expiration: null,
             nickname: null, vehicle_type: 'motorcycle', purchase_price: null,
             purchase_date: null, status: 'active', sale_info: null,
             maintenance_notes: null, estimated_value: null,
             sale_info_type: null, sale_info_date: null, sale_info_amount: null, sale_info_notes: null,
           },
           valid: false,
-          error: 'Name is required',
+          error: 'Make, model, and year are required',
         };
       }
 
@@ -804,15 +815,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
         ? parseFlexibleDate(row[mapping.purchase_date])
         : null;
 
-      const yearStr = mapping.year ? row[mapping.year]?.trim() : null;
-      let year: number | null = null;
-      if (yearStr) {
-        const parsed = parseInt(yearStr);
-        if (!isNaN(parsed) && parsed >= 1900 && parsed <= 2099) {
-          year = parsed;
-        }
-      }
-
       const purchasePriceStr = mapping.purchase_price ? row[mapping.purchase_price]?.trim() : null;
       let purchasePrice: number | null = null;
       if (purchasePriceStr) {
@@ -832,15 +834,15 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       return {
         original: row,
         mapped: {
-          name,
+          make,
+          model,
+          sub_model: mapping.sub_model ? row[mapping.sub_model]?.trim() || null : null,
           year,
           vin: mapping.vin ? row[mapping.vin]?.trim() || null : null,
           plate_number: mapping.plate_number ? row[mapping.plate_number]?.trim() || null : null,
           mileage: mapping.mileage ? row[mapping.mileage]?.trim() || null : null,
           notes: cleanedNotes || (notes !== cleanedNotes ? null : notes),
           tab_expiration: formatDateForDB(tabExpDate),
-          make: mapping.make ? row[mapping.make]?.trim() || null : null,
-          model: mapping.model ? row[mapping.model]?.trim() || null : null,
           nickname: mapping.nickname ? row[mapping.nickname]?.trim() || null : null,
           vehicle_type: vehicleType,
           purchase_price: purchasePrice,
@@ -897,15 +899,15 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
     for (const row of validRows) {
       try {
         const insertData: Record<string, unknown> = {
-          name: row.mapped.name,
+          make: row.mapped.make,
+          model: row.mapped.model,
+          sub_model: row.mapped.sub_model,
           year: row.mapped.year,
           vin: row.mapped.vin,
           plate_number: row.mapped.plate_number,
           mileage: row.mapped.mileage,
           notes: row.mapped.notes,
           tab_expiration: row.mapped.tab_expiration,
-          make: row.mapped.make,
-          model: row.mapped.model,
           nickname: row.mapped.nickname,
           vehicle_type: row.mapped.vehicle_type as 'motorcycle' | 'car' | 'boat' | 'trailer' | 'other',
           purchase_price: row.mapped.purchase_price,
@@ -921,7 +923,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           insertData.estimated_value = row.mapped.estimated_value;
         }
 
-        const { data, error } = await supabase.from('motorcycles').insert(insertData).select('id, name').single();
+        const { data, error } = await supabase.from('motorcycles').insert(insertData).select('id, make, model, sub_model, year').single();
 
         if (error) {
           console.error('Insert error:', error);
@@ -929,7 +931,14 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
         } else {
           success++;
           if (data) {
-            vehicleNameToId.set(data.name, data.id);
+            // Build display name for cross-referencing with documents/service records/mileage
+            const displayName = [data.year, data.make, data.model, data.sub_model].filter(Boolean).join(' ');
+            vehicleNameToId.set(displayName, data.id);
+            // Also map the original CSV vehicle_name for backward compat
+            const csvVehicleName = row.original.vehicle_name?.trim();
+            if (csvVehicleName && csvVehicleName !== displayName) {
+              vehicleNameToId.set(csvVehicleName, data.id);
+            }
           }
         }
       } catch (err) {
@@ -1277,7 +1286,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           <div className="flex gap-3">
             <button
               onClick={generatePreview}
-              disabled={!mapping.name}
+              disabled={!mapping.make || !mapping.model || !mapping.year}
               className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50"
             >
               Preview Import
@@ -1323,7 +1332,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
             )}
             {preview.some((r) => !r.valid) && (
               <p className="text-sm text-destructive mt-2">
-                {preview.filter((r) => !r.valid).length} rows will be skipped (missing name)
+                {preview.filter((r) => !r.valid).length} rows will be skipped (missing make/model/year)
               </p>
             )}
           </div>
@@ -1334,8 +1343,8 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
                 <thead className="bg-muted sticky top-0">
                   <tr>
                     <th className="px-2 py-2 text-left font-medium w-8"></th>
-                    <th className="px-2 py-2 text-left font-medium">Name</th>
-                    <th className="px-2 py-2 text-left font-medium">Make/Model</th>
+                    <th className="px-2 py-2 text-left font-medium">Make</th>
+                    <th className="px-2 py-2 text-left font-medium">Model</th>
                     <th className="px-2 py-2 text-left font-medium">Year</th>
                     <th className="px-2 py-2 text-left font-medium">VIN</th>
                     <th className="px-2 py-2 text-left font-medium">Status</th>
@@ -1356,11 +1365,11 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
                           <XCircleIcon className="w-4 h-4 text-destructive" />
                         )}
                       </td>
-                      <td className="px-2 py-2 font-medium max-w-[150px] truncate">
-                        {row.mapped.name || <span className="text-destructive">Missing</span>}
+                      <td className="px-2 py-2 font-medium max-w-[120px] truncate">
+                        {row.mapped.make || <span className="text-destructive">Missing</span>}
                       </td>
                       <td className="px-2 py-2 text-xs max-w-[120px] truncate">
-                        {[row.mapped.make, row.mapped.model].filter(Boolean).join(' ') || '-'}
+                        {row.mapped.model || <span className="text-destructive">Missing</span>}
                       </td>
                       <td className="px-2 py-2">{row.mapped.year || '-'}</td>
                       <td className="px-2 py-2 font-mono text-xs max-w-[100px] truncate">{row.mapped.vin || '-'}</td>

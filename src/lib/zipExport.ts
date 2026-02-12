@@ -9,6 +9,7 @@ import {
   MileageHistory,
   ValueHistory,
 } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { generateComprehensiveCSV, ExportOptions } from '@/lib/exportUtils';
 
 export interface ExportProgress {
@@ -117,9 +118,9 @@ function buildVehicleInfoJson(
     {
       vehicle: {
         id: vehicle.id,
-        name: vehicle.name,
         make: vehicle.make,
         model: vehicle.model,
+        sub_model: vehicle.sub_model,
         year: vehicle.year,
         vehicle_type: vehicle.vehicle_type,
         vin: vehicle.vin,
@@ -209,6 +210,7 @@ async function addVehicleToZip(
   fileCounter: { downloaded: number; skipped: number; skippedDetails: string[] },
   signal?: AbortSignal
 ): Promise<VehicleExportData | null> {
+  const vDisplayName = getVehicleDisplayName(vehicle);
   // Fetch all related data for this vehicle
   const [photosRes, documentsRes, serviceRecordsRes, _receiptsRes, mileageRes, valueRes] =
     await Promise.all([
@@ -290,7 +292,7 @@ async function addVehicleToZip(
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
       total: 0,
-      message: `${vehicle.name}: downloading photo...`,
+      message: `${vDisplayName}: downloading photo...`,
     });
 
     const blob = await fetchFileFromStorage(supabase, 'motorcycle-photos', photo.storage_path, signal);
@@ -305,7 +307,7 @@ async function addVehicleToZip(
       fileCounter.downloaded++;
     } else {
       fileCounter.skipped++;
-      fileCounter.skippedDetails.push(`${vehicle.name}: photo ${photo.storage_path}`);
+      fileCounter.skippedDetails.push(`${vDisplayName}: photo ${photo.storage_path}`);
     }
   }
 
@@ -317,7 +319,7 @@ async function addVehicleToZip(
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
       total: 0,
-      message: `${vehicle.name}: downloading document "${doc.title}"...`,
+      message: `${vDisplayName}: downloading document "${doc.title}"...`,
     });
 
     const blob = await fetchFileFromStorage(supabase, 'vehicle-documents', doc.storage_path, signal);
@@ -329,7 +331,7 @@ async function addVehicleToZip(
       fileCounter.downloaded++;
     } else {
       fileCounter.skipped++;
-      fileCounter.skippedDetails.push(`${vehicle.name}: document "${doc.title}"`);
+      fileCounter.skippedDetails.push(`${vDisplayName}: document "${doc.title}"`);
     }
   }
 
@@ -343,7 +345,7 @@ async function addVehicleToZip(
         phase: 'Downloading files',
         current: fileCounter.downloaded + fileCounter.skipped,
         total: 0,
-        message: `${vehicle.name}: downloading receipt for "${sr.title}"...`,
+        message: `${vDisplayName}: downloading receipt for "${sr.title}"...`,
       });
 
       const blob = await fetchFileFromStorage(supabase, 'service-receipts', receipt.storage_path, signal);
@@ -356,7 +358,7 @@ async function addVehicleToZip(
         fileCounter.downloaded++;
       } else {
         fileCounter.skipped++;
-        fileCounter.skippedDetails.push(`${vehicle.name}: receipt for "${sr.title}"`);
+        fileCounter.skippedDetails.push(`${vDisplayName}: receipt for "${sr.title}"`);
       }
     }
     if (filesForThisService.length > 0) {
@@ -398,8 +400,9 @@ export async function exportVehicleZip(
   const v = vehicle as Motorcycle;
   const zip = new JSZip();
   const date = new Date().toISOString().split('T')[0];
-  const vehicleFolderName = sanitizeFileName(v.name);
-  const rootFolder = sanitizeFileName(`${v.name}-${date}`);
+  const vDisplayName = getVehicleDisplayName(v);
+  const vehicleFolderName = sanitizeFileName(vDisplayName);
+  const rootFolder = sanitizeFileName(`${vDisplayName}-${date}`);
 
   const fileCounter = { downloaded: 0, skipped: 0, skippedDetails: [] as string[] };
 
@@ -412,16 +415,16 @@ export async function exportVehicleZip(
   // Build comprehensive CSV for single vehicle
   const serviceRecordsForCSV = exportData.serviceRecords.map((sr) => ({
     ...sr,
-    vehicle_name: v.name,
+    vehicle_name: vDisplayName,
     receipt_files: (exportData.receiptFileNamesByServiceId.get(sr.id) || []).join(','),
   }));
   const docsForCSV = exportData.documents.map((d) => ({
     ...d,
-    vehicle_name: v.name,
+    vehicle_name: vDisplayName,
   }));
   const mileageForCSV = exportData.mileageHistory.map((m) => ({
     ...m,
-    vehicle_name: v.name,
+    vehicle_name: vDisplayName,
   }));
 
   const csvContent = generateComprehensiveCSV(
@@ -473,7 +476,7 @@ export async function exportCollectionZip(
     .from('motorcycles')
     .select('*')
     .eq('collection_id', collectionId)
-    .order('name');
+    .order('make');
 
   if (error || !vehicles || vehicles.length === 0 || signal?.aborted) {
     return {
@@ -505,10 +508,10 @@ export async function exportCollectionZip(
       phase: 'Processing vehicles',
       current: i + 1,
       total: typedVehicles.length,
-      message: `Processing ${vehicle.name} (${i + 1}/${typedVehicles.length})...`,
+      message: `Processing ${getVehicleDisplayName(vehicle)} (${i + 1}/${typedVehicles.length})...`,
     });
 
-    const vehicleFolder = getUniqueFileName(vehicleFolderNames, sanitizeFileName(vehicle.name));
+    const vehicleFolder = getUniqueFileName(vehicleFolderNames, sanitizeFileName(getVehicleDisplayName(vehicle)));
     const exportData = await addVehicleToZip(
       zip,
       vehicle,
@@ -535,7 +538,7 @@ export async function exportCollectionZip(
   const allMileage: (MileageHistory & { vehicle_name: string })[] = [];
 
   for (const data of allExportData) {
-    const vName = data.vehicle.name;
+    const vName = getVehicleDisplayName(data.vehicle);
 
     for (const doc of data.documents) {
       allDocs.push({ ...doc, vehicle_name: vName });

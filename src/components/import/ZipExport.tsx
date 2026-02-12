@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import {
   generateComprehensiveCSV,
   ExportOptions,
@@ -181,7 +182,7 @@ export function ZipExport({ collections }: ZipExportProps) {
 
       // Fetch all data: documents, service records + receipts, mileage history
       const vehicleIds = vehicles.map((v) => v.id);
-      const vehicleNameMap = new Map(vehicles.map((v) => [v.id, v.name]));
+      const vehicleNameMap = new Map(vehicles.map((v) => [v.id, getVehicleDisplayName(v)]));
 
       const [docsRes, recordsRes, mileageRes] = await Promise.all([
         vehicleIds.length > 0
@@ -380,7 +381,7 @@ export function ZipExport({ collections }: ZipExportProps) {
               <option value="">Choose a vehicle...</option>
               {vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.name} {v.year ? `(${v.year})` : ''}
+                  {getVehicleDisplayName(v)}
                 </option>
               ))}
             </select>

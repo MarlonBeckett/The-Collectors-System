@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { FunnelIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { Motorcycle } from '@/types/database';
+import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { VehicleCard } from './VehicleCard';
 import { SearchBar } from './SearchBar';
 import { QuickStats } from './QuickStats';
@@ -18,8 +19,8 @@ type FilterTab = 'all' | 'tabs' | 'maintenance' | 'sold';
 type SortOption = 'expiration-asc' | 'expiration-desc' | 'name-asc' | 'name-desc' | 'year-desc' | 'year-asc' | 'added-desc' | 'added-asc';
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'name-asc', label: 'Name (A\u2013Z)' },
-  { key: 'name-desc', label: 'Name (Z\u2013A)' },
+  { key: 'name-asc', label: 'Vehicle (A\u2013Z)' },
+  { key: 'name-desc', label: 'Vehicle (Z\u2013A)' },
   { key: 'year-desc', label: 'Year (newest first)' },
   { key: 'year-asc', label: 'Year (oldest first)' },
   { key: 'expiration-asc', label: 'Expiration (soonest first)' },
@@ -84,43 +85,37 @@ export function VehicleList({ vehicles, vehiclePhotoMap }: VehicleListProps) {
       if (!aActive && bActive) return 1;
 
       // Secondary: sort by selected option
+      const nameA = getVehicleDisplayName(a);
+      const nameB = getVehicleDisplayName(b);
       switch (sortBy) {
         case 'expiration-asc': {
           const daysA = daysUntilExpiration(a.tab_expiration);
           const daysB = daysUntilExpiration(b.tab_expiration);
-          if (daysA === null && daysB === null) return a.name.localeCompare(b.name);
+          if (daysA === null && daysB === null) return nameA.localeCompare(nameB);
           if (daysA === null) return 1;
           if (daysB === null) return -1;
-          return daysA - daysB || a.name.localeCompare(b.name);
+          return daysA - daysB || nameA.localeCompare(nameB);
         }
         case 'expiration-desc': {
           const daysA = daysUntilExpiration(a.tab_expiration);
           const daysB = daysUntilExpiration(b.tab_expiration);
-          if (daysA === null && daysB === null) return a.name.localeCompare(b.name);
+          if (daysA === null && daysB === null) return nameA.localeCompare(nameB);
           if (daysA === null) return 1;
           if (daysB === null) return -1;
-          return daysB - daysA || a.name.localeCompare(b.name);
+          return daysB - daysA || nameA.localeCompare(nameB);
         }
         case 'name-asc':
-          return a.name.localeCompare(b.name);
+          return nameA.localeCompare(nameB);
         case 'name-desc':
-          return b.name.localeCompare(a.name);
-        case 'year-desc': {
-          if (a.year === null && b.year === null) return a.name.localeCompare(b.name);
-          if (a.year === null) return 1;
-          if (b.year === null) return -1;
-          return b.year - a.year || a.name.localeCompare(b.name);
-        }
-        case 'year-asc': {
-          if (a.year === null && b.year === null) return a.name.localeCompare(b.name);
-          if (a.year === null) return 1;
-          if (b.year === null) return -1;
-          return a.year - b.year || a.name.localeCompare(b.name);
-        }
+          return nameB.localeCompare(nameA);
+        case 'year-desc':
+          return b.year - a.year || nameA.localeCompare(nameB);
+        case 'year-asc':
+          return a.year - b.year || nameA.localeCompare(nameB);
         case 'added-desc':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || a.name.localeCompare(b.name);
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || nameA.localeCompare(nameB);
         case 'added-asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.name.localeCompare(b.name);
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || nameA.localeCompare(nameB);
         default:
           return 0;
       }
@@ -157,12 +152,13 @@ export function VehicleList({ vehicles, vehiclePhotoMap }: VehicleListProps) {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(vehicle =>
-        vehicle.name.toLowerCase().includes(query) ||
-        vehicle.make?.toLowerCase().includes(query) ||
-        vehicle.model?.toLowerCase().includes(query) ||
+        vehicle.make.toLowerCase().includes(query) ||
+        vehicle.model.toLowerCase().includes(query) ||
+        vehicle.sub_model?.toLowerCase().includes(query) ||
+        vehicle.nickname?.toLowerCase().includes(query) ||
         vehicle.plate_number?.toLowerCase().includes(query) ||
         vehicle.vin?.toLowerCase().includes(query) ||
-        vehicle.year?.toString().includes(query)
+        vehicle.year.toString().includes(query)
       );
     }
 
