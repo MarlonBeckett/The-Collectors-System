@@ -46,7 +46,7 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
   const defaultCollectionId = collectionId || (collections && collections.length > 0 ? collections[0].id : null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(defaultCollectionId);
 
-  const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle?.vehicle_type || 'motorcycle');
+  const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle?.vehicle_type || 'car');
   const [make, setMake] = useState(vehicle?.make || '');
   const [model, setModel] = useState(vehicle?.model || '');
   const [subModel, setSubModel] = useState(vehicle?.sub_model || '');
