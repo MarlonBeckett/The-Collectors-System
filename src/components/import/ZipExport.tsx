@@ -256,7 +256,7 @@ export function ZipExport({ collections }: ZipExportProps) {
       const zip = new JSZip();
       zip.file('csv/collection-export.csv', csvContent);
 
-      const blob = await zip.generateAsync({ type: 'blob' });
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       const filename = `${collectionName}-export-${date}.zip`;
 
       if (isIOS()) {
