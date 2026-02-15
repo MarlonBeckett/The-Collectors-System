@@ -18,6 +18,11 @@ import {
   ExportResult,
 } from '@/lib/zipExport';
 import {
+  savePendingExport,
+  loadPendingExport,
+  clearPendingExport,
+} from '@/lib/exportStore';
+import {
   ArchiveBoxIcon,
   ArrowDownTrayIcon,
   TableCellsIcon,
@@ -74,6 +79,23 @@ export function ZipExport({ collections }: ZipExportProps) {
     };
   }, [downloadInfo]);
 
+  // On mount, check IndexedDB for a pending export that survived a page refresh
+  useEffect(() => {
+    let cancelled = false;
+    loadPendingExport().then((pending) => {
+      if (cancelled || !pending) return;
+      const url = URL.createObjectURL(pending.blob);
+      setDownloadInfo({ url, filename: pending.filename, blob: pending.blob });
+      setResult({
+        success: true,
+        totalFiles: pending.totalFiles,
+        skippedFiles: pending.skippedFiles,
+        skippedDetails: pending.skippedDetails,
+      });
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -114,6 +136,26 @@ export function ZipExport({ collections }: ZipExportProps) {
     setProgress(p);
   }, []);
 
+  /** Persist blob to IndexedDB first (survives refresh), then update React state. */
+  const finalizeExport = useCallback(async (blob: Blob, filename: string, res: ExportResult) => {
+    // Save to IndexedDB FIRST so it survives a page refresh
+    await savePendingExport(blob, filename, res.totalFiles, res.skippedFiles, res.skippedDetails);
+
+    const url = URL.createObjectURL(blob);
+    setDownloadInfo({ url, filename, blob });
+    setResult(res);
+
+    // Auto-download on desktop as a convenience; on mobile the user
+    // taps the download link shown in the result section.
+    if (!isMobileDevice()) {
+      downloadBlob(blob, filename);
+    }
+  }, []);
+
+  const handleDownloadClick = () => {
+    clearPendingExport();
+  };
+
   const handleCollectionExport = async () => {
     const collection = collections.find((c) => c.id === selectedCollectionId);
     if (!collection) return;
@@ -136,16 +178,9 @@ export function ZipExport({ collections }: ZipExportProps) {
         handleProgress,
         controller.signal
       );
-      if (!controller.signal.aborted) {
-        if (res.blob && res.filename) {
-          const url = URL.createObjectURL(res.blob);
-          setDownloadInfo({ url, filename: res.filename, blob: res.blob });
-          // Auto-download on desktop as a convenience; on mobile the user
-          // taps the download link that is always shown in the result section.
-          if (!isMobileDevice()) {
-            downloadBlob(res.blob, res.filename);
-          }
-        }
+      if (!controller.signal.aborted && res.blob && res.filename) {
+        await finalizeExport(res.blob, res.filename, res);
+      } else if (!controller.signal.aborted) {
         setResult(res);
       }
     } catch (err) {
@@ -175,14 +210,9 @@ export function ZipExport({ collections }: ZipExportProps) {
 
     try {
       const res = await exportVehicleZip(selectedVehicleId, supabase, handleProgress, controller.signal);
-      if (!controller.signal.aborted) {
-        if (res.blob && res.filename) {
-          const url = URL.createObjectURL(res.blob);
-          setDownloadInfo({ url, filename: res.filename, blob: res.blob });
-          if (!isMobileDevice()) {
-            downloadBlob(res.blob, res.filename);
-          }
-        }
+      if (!controller.signal.aborted && res.blob && res.filename) {
+        await finalizeExport(res.blob, res.filename, res);
+      } else if (!controller.signal.aborted) {
         setResult(res);
       }
     } catch (err) {
@@ -269,14 +299,8 @@ export function ZipExport({ collections }: ZipExportProps) {
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       const filename = `${collectionName}-export-${date}.zip`;
 
-      const url = URL.createObjectURL(blob);
-      setDownloadInfo({ url, filename, blob });
-      if (!isMobileDevice()) {
-        downloadBlob(blob, filename);
-      }
-
       if (!controller.signal.aborted) {
-        setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
+        await finalizeExport(blob, filename, { success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -516,6 +540,7 @@ export function ZipExport({ collections }: ZipExportProps) {
                   <a
                     href={downloadInfo.url}
                     download={downloadInfo.filename}
+                    onClick={handleDownloadClick}
                     className="flex-1 py-3 px-4 font-semibold flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:opacity-90 transition-opacity text-center"
                   >
                     <ArrowDownTrayIcon className="w-5 h-5" />
@@ -524,6 +549,7 @@ export function ZipExport({ collections }: ZipExportProps) {
                   {typeof navigator !== 'undefined' && navigator.canShare?.({ files: [new File([], 'test')] }) && (
                     <button
                       onClick={() => {
+                        clearPendingExport();
                         const file = new File([downloadInfo.blob], downloadInfo.filename, { type: 'application/zip' });
                         navigator.share?.({ files: [file] }).catch(() => {});
                       }}
