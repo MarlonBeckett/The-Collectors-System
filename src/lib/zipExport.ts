@@ -24,6 +24,10 @@ export interface ExportResult {
   totalFiles: number;
   skippedFiles: number;
   skippedDetails: string[];
+  /** On iOS the blob is returned instead of auto-downloading */
+  blob?: Blob;
+  /** Suggested filename for the download */
+  filename?: string;
 }
 
 export interface VehicleExportData {
@@ -44,7 +48,7 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/\s+/g, ' ').trim();
 }
 
-function isIOS(): boolean {
+export function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -498,7 +502,22 @@ export async function exportVehicleZip(
     return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
   }
 
-  downloadBlob(blob, `${rootFolder}.zip`);
+  const filename = `${rootFolder}.zip`;
+
+  // On iOS, return the blob for the UI to render a tappable download link.
+  // Programmatic downloads (click(), window.open) don't work on iOS Safari.
+  if (isIOS()) {
+    return {
+      success: true,
+      totalFiles: fileCounter.downloaded,
+      skippedFiles: fileCounter.skipped,
+      skippedDetails: fileCounter.skippedDetails,
+      blob,
+      filename,
+    };
+  }
+
+  downloadBlob(blob, filename);
 
   return {
     success: true,
@@ -632,7 +651,20 @@ export async function exportCollectionZip(
     return { success: false, totalFiles: 0, skippedFiles: 0, skippedDetails: ['Export cancelled'] };
   }
 
-  downloadBlob(blob, `${rootFolder}.zip`);
+  const filename = `${rootFolder}.zip`;
+
+  if (isIOS()) {
+    return {
+      success: true,
+      totalFiles: fileCounter.downloaded,
+      skippedFiles: fileCounter.skipped,
+      skippedDetails: fileCounter.skippedDetails,
+      blob,
+      filename,
+    };
+  }
+
+  downloadBlob(blob, filename);
 
   return {
     success: true,

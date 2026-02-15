@@ -13,6 +13,7 @@ import {
   exportCollectionZip,
   exportVehicleZip,
   downloadBlob,
+  isIOS,
   ExportProgress,
   ExportResult,
 } from '@/lib/zipExport';
@@ -50,16 +51,28 @@ export function ZipExport({ collections }: ZipExportProps) {
     encodeStatusInNotes: true,
   });
 
+  // iOS: holds the blob URL for manual download tap
+  const [downloadInfo, setDownloadInfo] = useState<{ url: string; filename: string; blob: Blob } | null>(null);
+
   const [selectedCollectionId, setSelectedCollectionId] = useSelectedCollection(collections);
 
   const abortRef = useRef<AbortController | null>(null);
 
-  // Abort any running export on unmount
+  // Abort any running export on unmount, clean up blob URL
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
+
+  // Clean up blob URL when download info changes
+  useEffect(() => {
+    return () => {
+      if (downloadInfo?.url) {
+        URL.revokeObjectURL(downloadInfo.url);
+      }
+    };
+  }, [downloadInfo]);
 
   const supabase = createClient();
 
@@ -111,6 +124,7 @@ export function ZipExport({ collections }: ZipExportProps) {
 
     setExporting(true);
     setResult(null);
+    setDownloadInfo(null);
     setProgress({ phase: 'Starting', current: 0, total: 1, message: 'Starting export...' });
 
     try {
@@ -123,6 +137,9 @@ export function ZipExport({ collections }: ZipExportProps) {
         controller.signal
       );
       if (!controller.signal.aborted) {
+        if (res.blob && res.filename) {
+          setDownloadInfo({ url: URL.createObjectURL(res.blob), filename: res.filename, blob: res.blob });
+        }
         setResult(res);
       }
     } catch (err) {
@@ -147,11 +164,15 @@ export function ZipExport({ collections }: ZipExportProps) {
 
     setExporting(true);
     setResult(null);
+    setDownloadInfo(null);
     setProgress({ phase: 'Starting', current: 0, total: 1, message: 'Starting export...' });
 
     try {
       const res = await exportVehicleZip(selectedVehicleId, supabase, handleProgress, controller.signal);
       if (!controller.signal.aborted) {
+        if (res.blob && res.filename) {
+          setDownloadInfo({ url: URL.createObjectURL(res.blob), filename: res.filename, blob: res.blob });
+        }
         setResult(res);
       }
     } catch (err) {
@@ -174,6 +195,7 @@ export function ZipExport({ collections }: ZipExportProps) {
 
     setExporting(true);
     setResult(null);
+    setDownloadInfo(null);
     try {
       const collection = collections.find((c) => c.id === selectedCollectionId);
       const collectionName = collection?.name.toLowerCase().replace(/\s+/g, '-') || 'vehicles';
@@ -235,7 +257,13 @@ export function ZipExport({ collections }: ZipExportProps) {
       zip.file('csv/collection-export.csv', csvContent);
 
       const blob = await zip.generateAsync({ type: 'blob' });
-      downloadBlob(blob, `${collectionName}-export-${date}.zip`);
+      const filename = `${collectionName}-export-${date}.zip`;
+
+      if (isIOS()) {
+        setDownloadInfo({ url: URL.createObjectURL(blob), filename, blob });
+      } else {
+        downloadBlob(blob, filename);
+      }
 
       if (!controller.signal.aborted) {
         setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
@@ -276,6 +304,7 @@ export function ZipExport({ collections }: ZipExportProps) {
               setSelectedCollectionId(e.target.value);
               setSelectedVehicleId('');
               setResult(null);
+              setDownloadInfo(null);
             }}
             className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
           >
@@ -298,7 +327,7 @@ export function ZipExport({ collections }: ZipExportProps) {
         <h3 className="font-semibold">Export Type</h3>
 
         <button
-          onClick={() => { setExportMode('collection'); setResult(null); }}
+          onClick={() => { setExportMode('collection'); setResult(null); setDownloadInfo(null); }}
           disabled={exporting}
           className={`w-full text-left p-4 border transition-colors ${
             exportMode === 'collection'
@@ -318,7 +347,7 @@ export function ZipExport({ collections }: ZipExportProps) {
         </button>
 
         <button
-          onClick={() => { setExportMode('vehicle'); setResult(null); }}
+          onClick={() => { setExportMode('vehicle'); setResult(null); setDownloadInfo(null); }}
           disabled={exporting}
           className={`w-full text-left p-4 border transition-colors ${
             exportMode === 'vehicle'
@@ -338,7 +367,7 @@ export function ZipExport({ collections }: ZipExportProps) {
         </button>
 
         <button
-          onClick={() => { setExportMode('csv'); setResult(null); }}
+          onClick={() => { setExportMode('csv'); setResult(null); setDownloadInfo(null); }}
           disabled={exporting}
           className={`w-full text-left p-4 border transition-colors ${
             exportMode === 'csv'
@@ -458,7 +487,7 @@ export function ZipExport({ collections }: ZipExportProps) {
           }`}
         >
           {result.success ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <CheckCircleIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
                 <span className="font-medium">Export complete</span>
@@ -471,6 +500,28 @@ export function ZipExport({ collections }: ZipExportProps) {
                   </span>
                 )}
               </p>
+              {/* iOS: show tappable download link since programmatic downloads don't work */}
+              {downloadInfo && (
+                <div className="flex gap-2">
+                  <a
+                    href={downloadInfo.url}
+                    download={downloadInfo.filename}
+                    className="flex-1 py-3 px-4 font-semibold flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:opacity-90 transition-opacity text-center"
+                  >
+                    <ArrowDownTrayIcon className="w-5 h-5" />
+                    Tap to Download
+                  </a>
+                  <button
+                    onClick={() => {
+                      const file = new File([downloadInfo.blob], downloadInfo.filename, { type: 'application/zip' });
+                      navigator.share?.({ files: [file] }).catch(() => {});
+                    }}
+                    className="py-3 px-4 font-semibold bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
+                  >
+                    Share
+                  </button>
+                </div>
+              )}
               {result.skippedDetails.length > 0 && (
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer hover:text-foreground">
