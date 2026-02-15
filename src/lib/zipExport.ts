@@ -496,6 +496,10 @@ export async function exportVehicleZip(
   const blob = await zip.generateAsync({
     type: 'blob',
     streamFiles: true,
+    // STORE = no compression. Photos, PDFs, and other media are already
+    // compressed so re-compressing wastes CPU/memory for zero size benefit.
+    // This prevents iOS Safari from killing the tab due to memory pressure.
+    compression: 'STORE',
   });
 
   if (signal?.aborted) {
@@ -645,6 +649,10 @@ export async function exportCollectionZip(
   const blob = await zip.generateAsync({
     type: 'blob',
     streamFiles: true,
+    // STORE = no compression. Photos, PDFs, and other media are already
+    // compressed so re-compressing wastes CPU/memory for zero size benefit.
+    // This prevents iOS Safari from killing the tab due to memory pressure.
+    compression: 'STORE',
   });
 
   if (signal?.aborted) {

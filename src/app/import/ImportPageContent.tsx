@@ -179,6 +179,17 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
     setIsImporting(step === 'importing');
   }, []);
 
+  const handleTabChange = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === 'export') {
+      url.searchParams.set('tab', 'export');
+    } else {
+      url.searchParams.delete('tab');
+    }
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   const handleBulkImportingChange = useCallback((importing: boolean) => {
     setIsImporting(importing);
   }, []);
@@ -207,7 +218,7 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
       {/* Tabs */}
       <div className="flex border-b border-border mb-6">
         <button
-          onClick={() => setActiveTab('import')}
+          onClick={() => handleTabChange('import')}
           className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
             activeTab === 'import'
               ? 'text-primary border-b-2 border-primary'
@@ -217,7 +228,7 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
           Import
         </button>
         <button
-          onClick={() => setActiveTab('export')}
+          onClick={() => handleTabChange('export')}
           className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
             activeTab === 'export'
               ? 'text-primary border-b-2 border-primary'
