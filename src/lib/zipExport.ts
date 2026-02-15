@@ -44,7 +44,33 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/\s+/g, ' ').trim();
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
+  if (isIOS()) {
+    // iOS Safari doesn't support <a download> — it navigates to the blob URL
+    // instead of downloading, which refreshes the page and loses the file.
+    // Use the Web Share API (native share sheet with "Save to Files") if available,
+    // otherwise open in a new tab.
+    const file = new File([blob], filename, { type: blob.type || 'application/zip' });
+    if (navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(() => {
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 120_000);
+      });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -52,7 +78,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 async function fetchFileFromStorage(
@@ -284,85 +310,105 @@ async function addVehicleToZip(
   const receiptFileNamesByServiceId = new Map<string, string[]>();
   const docFileNameById = new Map<string, string>();
 
+  // Collect all files to download, then fetch in parallel batches for speed
+  const BATCH_SIZE = 5;
+
   // Download and add photos to images/{vehicleFolderName}/
   const photoNames = new Set<string>();
-  for (const photo of photos) {
+  for (let i = 0; i < photos.length; i += BATCH_SIZE) {
     if (signal?.aborted) return null;
+    const batch = photos.slice(i, i + BATCH_SIZE);
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
       total: 0,
-      message: `${vDisplayName}: downloading photo...`,
+      message: `${vDisplayName}: downloading photos (${i + 1}-${Math.min(i + BATCH_SIZE, photos.length)} of ${photos.length})...`,
     });
-
-    const blob = await fetchFileFromStorage(supabase, 'motorcycle-photos', photo.storage_path, signal);
+    const blobs = await Promise.all(
+      batch.map((photo) => fetchFileFromStorage(supabase, 'motorcycle-photos', photo.storage_path, signal))
+    );
     if (signal?.aborted) return null;
-    if (blob) {
-      const ext = photo.storage_path.split('.').pop() || 'jpg';
-      const baseName = photo.caption
-        ? `${sanitizeFileName(photo.caption)}.${ext}`
-        : photo.storage_path.split('/').pop() || `photo.${ext}`;
-      const fileName = getUniqueFileName(photoNames, baseName);
-      zip.file(`${rootFolder}/images/${vehicleFolderName}/${fileName}`, blob);
-      fileCounter.downloaded++;
-    } else {
-      fileCounter.skipped++;
-      fileCounter.skippedDetails.push(`${vDisplayName}: photo ${photo.storage_path}`);
+    for (let j = 0; j < batch.length; j++) {
+      const photo = batch[j];
+      const blob = blobs[j];
+      if (blob) {
+        const ext = photo.storage_path.split('.').pop() || 'jpg';
+        const baseName = photo.caption
+          ? `${sanitizeFileName(photo.caption)}.${ext}`
+          : photo.storage_path.split('/').pop() || `photo.${ext}`;
+        const fileName = getUniqueFileName(photoNames, baseName);
+        zip.file(`${rootFolder}/images/${vehicleFolderName}/${fileName}`, blob);
+        fileCounter.downloaded++;
+      } else {
+        fileCounter.skipped++;
+        fileCounter.skippedDetails.push(`${vDisplayName}: photo ${photo.storage_path}`);
+      }
     }
   }
 
   // Download and add documents to documents/{vehicleFolderName}/
   const docNames = new Set<string>();
-  for (const doc of documents) {
+  for (let i = 0; i < documents.length; i += BATCH_SIZE) {
     if (signal?.aborted) return null;
+    const batch = documents.slice(i, i + BATCH_SIZE);
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
       total: 0,
-      message: `${vDisplayName}: downloading document "${doc.title}"...`,
+      message: `${vDisplayName}: downloading documents (${i + 1}-${Math.min(i + BATCH_SIZE, documents.length)} of ${documents.length})...`,
     });
-
-    const blob = await fetchFileFromStorage(supabase, 'vehicle-documents', doc.storage_path, signal);
+    const blobs = await Promise.all(
+      batch.map((doc) => fetchFileFromStorage(supabase, 'vehicle-documents', doc.storage_path, signal))
+    );
     if (signal?.aborted) return null;
-    if (blob) {
-      const fileName = getUniqueFileName(docNames, doc.file_name || doc.storage_path.split('/').pop() || 'document');
-      zip.file(`${rootFolder}/documents/${vehicleFolderName}/${fileName}`, blob);
-      docFileNameById.set(doc.id, fileName);
-      fileCounter.downloaded++;
-    } else {
-      fileCounter.skipped++;
-      fileCounter.skippedDetails.push(`${vDisplayName}: document "${doc.title}"`);
+    for (let j = 0; j < batch.length; j++) {
+      const doc = batch[j];
+      const blob = blobs[j];
+      if (blob) {
+        const fileName = getUniqueFileName(docNames, doc.file_name || doc.storage_path.split('/').pop() || 'document');
+        zip.file(`${rootFolder}/documents/${vehicleFolderName}/${fileName}`, blob);
+        docFileNameById.set(doc.id, fileName);
+        fileCounter.downloaded++;
+      } else {
+        fileCounter.skipped++;
+        fileCounter.skippedDetails.push(`${vDisplayName}: document "${doc.title}"`);
+      }
     }
   }
 
   // Download and add service record receipts to receipts/{vehicleFolderName}/
   const receiptNames = new Set<string>();
-  for (const sr of serviceRecordsWithReceipts) {
-    const filesForThisService: string[] = [];
-    for (const receipt of sr.receipts) {
-      if (signal?.aborted) return null;
-      onProgress({
-        phase: 'Downloading files',
-        current: fileCounter.downloaded + fileCounter.skipped,
-        total: 0,
-        message: `${vDisplayName}: downloading receipt for "${sr.title}"...`,
-      });
-
-      const blob = await fetchFileFromStorage(supabase, 'service-receipts', receipt.storage_path, signal);
-      if (signal?.aborted) return null;
+  const allReceiptItems = serviceRecordsWithReceipts.flatMap((sr) =>
+    sr.receipts.map((receipt) => ({ sr, receipt }))
+  );
+  for (let i = 0; i < allReceiptItems.length; i += BATCH_SIZE) {
+    if (signal?.aborted) return null;
+    const batch = allReceiptItems.slice(i, i + BATCH_SIZE);
+    onProgress({
+      phase: 'Downloading files',
+      current: fileCounter.downloaded + fileCounter.skipped,
+      total: 0,
+      message: `${vDisplayName}: downloading receipts (${i + 1}-${Math.min(i + BATCH_SIZE, allReceiptItems.length)} of ${allReceiptItems.length})...`,
+    });
+    const blobs = await Promise.all(
+      batch.map((item) => fetchFileFromStorage(supabase, 'service-receipts', item.receipt.storage_path, signal))
+    );
+    if (signal?.aborted) return null;
+    for (let j = 0; j < batch.length; j++) {
+      const { sr, receipt } = batch[j];
+      const blob = blobs[j];
       if (blob) {
         const receiptFileName = receipt.file_name || receipt.storage_path.split('/').pop() || 'receipt';
         const fileName = getUniqueFileName(receiptNames, receiptFileName);
         zip.file(`${rootFolder}/receipts/${vehicleFolderName}/${fileName}`, blob);
-        filesForThisService.push(fileName);
+        const existing = receiptFileNamesByServiceId.get(sr.id) || [];
+        existing.push(fileName);
+        receiptFileNamesByServiceId.set(sr.id, existing);
         fileCounter.downloaded++;
       } else {
         fileCounter.skipped++;
         fileCounter.skippedDetails.push(`${vDisplayName}: receipt for "${sr.title}"`);
       }
-    }
-    if (filesForThisService.length > 0) {
-      receiptFileNamesByServiceId.set(sr.id, filesForThisService);
     }
   }
 

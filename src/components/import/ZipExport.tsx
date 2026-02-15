@@ -12,6 +12,7 @@ import { ServiceRecord, MileageHistory } from '@/types/database';
 import {
   exportCollectionZip,
   exportVehicleZip,
+  downloadBlob,
   ExportProgress,
   ExportResult,
 } from '@/lib/zipExport';
@@ -234,14 +235,7 @@ export function ZipExport({ collections }: ZipExportProps) {
       zip.file('csv/collection-export.csv', csvContent);
 
       const blob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${collectionName}-export-${date}.zip`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${collectionName}-export-${date}.zip`);
 
       if (!controller.signal.aborted) {
         setResult({ success: true, totalFiles: 1, skippedFiles: 0, skippedDetails: [] });
