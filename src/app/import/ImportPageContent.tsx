@@ -174,6 +174,25 @@ function ImportTabs({ collections, subscriptionInfo }: ImportPageContentProps) {
     }
   }, [tabParam]);
 
+  // If there's a pending export in IndexedDB (survived a page refresh),
+  // auto-switch to the export tab so the user sees the download link.
+  useEffect(() => {
+    if (activeTab === 'export') return; // already there
+    let cancelled = false;
+    import('@/lib/exportStore').then(({ hasPendingExport }) =>
+      hasPendingExport().then((has) => {
+        if (!cancelled && has) {
+          setActiveTab('export');
+          // Update URL so subsequent refreshes also land on the export tab
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'export');
+          window.history.replaceState({}, '', url.toString());
+        }
+      })
+    );
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleCsvStepChange = useCallback((step: string) => {
     setCsvStep(step);
     setIsImporting(step === 'importing');
