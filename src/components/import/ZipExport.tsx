@@ -13,7 +13,7 @@ import {
   exportCollectionZip,
   exportVehicleZip,
   downloadBlob,
-  isIOS,
+  isMobileDevice,
   ExportProgress,
   ExportResult,
 } from '@/lib/zipExport';
@@ -259,7 +259,7 @@ export function ZipExport({ collections }: ZipExportProps) {
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       const filename = `${collectionName}-export-${date}.zip`;
 
-      if (isIOS()) {
+      if (isMobileDevice()) {
         setDownloadInfo({ url: URL.createObjectURL(blob), filename, blob });
       } else {
         downloadBlob(blob, filename);

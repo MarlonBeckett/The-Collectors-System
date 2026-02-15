@@ -48,17 +48,32 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/\s+/g, ' ').trim();
 }
 
-export function isIOS(): boolean {
+/**
+ * Detect mobile browsers (iOS + Android).
+ * Mobile browsers often don't support programmatic <a download> clicks —
+ * they navigate to the blob URL instead of downloading, which refreshes the
+ * page and loses the file.  For these devices we return the blob to the UI
+ * so the user can tap a visible download link or use the share sheet.
+ */
+export function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // iOS
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return true;
+  }
+  // Android
+  if (/Android/i.test(navigator.userAgent)) {
+    return true;
+  }
+  return false;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
-  if (isIOS()) {
-    // iOS Safari doesn't support <a download> — it navigates to the blob URL
-    // instead of downloading, which refreshes the page and loses the file.
-    // Use the Web Share API (native share sheet with "Save to Files") if available,
+  if (isMobileDevice()) {
+    // Mobile browsers often don't support <a download> — they navigate to the
+    // blob URL instead of downloading, which refreshes the page and loses the
+    // file.  Use the Web Share API (share sheet / "Save to Files") if available,
     // otherwise open in a new tab.
     const file = new File([blob], filename, { type: blob.type || 'application/zip' });
     if (navigator.canShare?.({ files: [file] })) {
@@ -508,9 +523,9 @@ export async function exportVehicleZip(
 
   const filename = `${rootFolder}.zip`;
 
-  // On iOS, return the blob for the UI to render a tappable download link.
-  // Programmatic downloads (click(), window.open) don't work on iOS Safari.
-  if (isIOS()) {
+  // On mobile, return the blob for the UI to render a tappable download link.
+  // Programmatic downloads (click(), window.open) don't work reliably on mobile browsers.
+  if (isMobileDevice()) {
     return {
       success: true,
       totalFiles: fileCounter.downloaded,
@@ -661,7 +676,7 @@ export async function exportCollectionZip(
 
   const filename = `${rootFolder}.zip`;
 
-  if (isIOS()) {
+  if (isMobileDevice()) {
     return {
       success: true,
       totalFiles: fileCounter.downloaded,

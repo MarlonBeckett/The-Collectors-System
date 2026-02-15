@@ -113,10 +113,11 @@ export function generateCSV(
 export function downloadCSV(csv: string, filename: string = 'vehicles-export.csv'): void {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+    /Android/i.test(navigator.userAgent);
 
-  if (isIOS) {
+  if (isMobile) {
     const file = new File([blob], filename, { type: blob.type });
     if (navigator.canShare?.({ files: [file] })) {
       navigator.share({ files: [file] }).catch(() => {
