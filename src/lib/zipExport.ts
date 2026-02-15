@@ -523,26 +523,15 @@ export async function exportVehicleZip(
 
   const filename = `${rootFolder}.zip`;
 
-  // On mobile, return the blob for the UI to render a tappable download link.
-  // Programmatic downloads (click(), window.open) don't work reliably on mobile browsers.
-  if (isMobileDevice()) {
-    return {
-      success: true,
-      totalFiles: fileCounter.downloaded,
-      skippedFiles: fileCounter.skipped,
-      skippedDetails: fileCounter.skippedDetails,
-      blob,
-      filename,
-    };
-  }
-
-  downloadBlob(blob, filename);
-
+  // Always return the blob so the UI can show a download link.
+  // The caller decides whether to also auto-download.
   return {
     success: true,
     totalFiles: fileCounter.downloaded,
     skippedFiles: fileCounter.skipped,
     skippedDetails: fileCounter.skippedDetails,
+    blob,
+    filename,
   };
 }
 
@@ -676,23 +665,14 @@ export async function exportCollectionZip(
 
   const filename = `${rootFolder}.zip`;
 
-  if (isMobileDevice()) {
-    return {
-      success: true,
-      totalFiles: fileCounter.downloaded,
-      skippedFiles: fileCounter.skipped,
-      skippedDetails: fileCounter.skippedDetails,
-      blob,
-      filename,
-    };
-  }
-
-  downloadBlob(blob, filename);
-
+  // Always return the blob so the UI can show a download link.
+  // The caller decides whether to also auto-download.
   return {
     success: true,
     totalFiles: fileCounter.downloaded,
     skippedFiles: fileCounter.skipped,
     skippedDetails: fileCounter.skippedDetails,
+    blob,
+    filename,
   };
 }

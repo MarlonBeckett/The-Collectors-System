@@ -138,7 +138,13 @@ export function ZipExport({ collections }: ZipExportProps) {
       );
       if (!controller.signal.aborted) {
         if (res.blob && res.filename) {
-          setDownloadInfo({ url: URL.createObjectURL(res.blob), filename: res.filename, blob: res.blob });
+          const url = URL.createObjectURL(res.blob);
+          setDownloadInfo({ url, filename: res.filename, blob: res.blob });
+          // Auto-download on desktop as a convenience; on mobile the user
+          // taps the download link that is always shown in the result section.
+          if (!isMobileDevice()) {
+            downloadBlob(res.blob, res.filename);
+          }
         }
         setResult(res);
       }
@@ -171,7 +177,11 @@ export function ZipExport({ collections }: ZipExportProps) {
       const res = await exportVehicleZip(selectedVehicleId, supabase, handleProgress, controller.signal);
       if (!controller.signal.aborted) {
         if (res.blob && res.filename) {
-          setDownloadInfo({ url: URL.createObjectURL(res.blob), filename: res.filename, blob: res.blob });
+          const url = URL.createObjectURL(res.blob);
+          setDownloadInfo({ url, filename: res.filename, blob: res.blob });
+          if (!isMobileDevice()) {
+            downloadBlob(res.blob, res.filename);
+          }
         }
         setResult(res);
       }
@@ -259,9 +269,9 @@ export function ZipExport({ collections }: ZipExportProps) {
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       const filename = `${collectionName}-export-${date}.zip`;
 
-      if (isMobileDevice()) {
-        setDownloadInfo({ url: URL.createObjectURL(blob), filename, blob });
-      } else {
+      const url = URL.createObjectURL(blob);
+      setDownloadInfo({ url, filename, blob });
+      if (!isMobileDevice()) {
         downloadBlob(blob, filename);
       }
 
@@ -500,7 +510,7 @@ export function ZipExport({ collections }: ZipExportProps) {
                   </span>
                 )}
               </p>
-              {/* iOS: show tappable download link since programmatic downloads don't work */}
+              {/* Always show download link so users can tap/click to save */}
               {downloadInfo && (
                 <div className="flex gap-2">
                   <a
@@ -509,17 +519,19 @@ export function ZipExport({ collections }: ZipExportProps) {
                     className="flex-1 py-3 px-4 font-semibold flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:opacity-90 transition-opacity text-center"
                   >
                     <ArrowDownTrayIcon className="w-5 h-5" />
-                    Tap to Download
+                    Download
                   </a>
-                  <button
-                    onClick={() => {
-                      const file = new File([downloadInfo.blob], downloadInfo.filename, { type: 'application/zip' });
-                      navigator.share?.({ files: [file] }).catch(() => {});
-                    }}
-                    className="py-3 px-4 font-semibold bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
-                  >
-                    Share
-                  </button>
+                  {typeof navigator !== 'undefined' && navigator.canShare?.({ files: [new File([], 'test')] }) && (
+                    <button
+                      onClick={() => {
+                        const file = new File([downloadInfo.blob], downloadInfo.filename, { type: 'application/zip' });
+                        navigator.share?.({ files: [file] }).catch(() => {});
+                      }}
+                      className="py-3 px-4 font-semibold bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity"
+                    >
+                      Share
+                    </button>
+                  )}
                 </div>
               )}
               {result.skippedDetails.length > 0 && (
