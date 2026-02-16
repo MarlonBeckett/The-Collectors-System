@@ -52,7 +52,8 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Delay revocation to let mobile browsers start the download
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 async function fetchFileFromStorage(
@@ -118,6 +119,7 @@ function buildVehicleInfoJson(
     {
       vehicle: {
         id: vehicle.id,
+        name: getVehicleDisplayName(vehicle),
         make: vehicle.make,
         model: vehicle.model,
         sub_model: vehicle.sub_model,
@@ -207,7 +209,7 @@ async function addVehicleToZip(
   vehicleFolderName: string,
   supabase: SupabaseClient,
   onProgress: (progress: ExportProgress) => void,
-  fileCounter: { downloaded: number; skipped: number; skippedDetails: string[] },
+  fileCounter: { downloaded: number; skipped: number; totalFiles: number; skippedDetails: string[] },
   signal?: AbortSignal
 ): Promise<VehicleExportData | null> {
   const vDisplayName = getVehicleDisplayName(vehicle);
@@ -269,6 +271,10 @@ async function addVehicleToZip(
     receipts: allReceipts.filter((r) => r.service_record_id === sr.id),
   }));
 
+  // Count total files for this vehicle and add to fileCounter total
+  const totalReceiptsForVehicle = serviceRecordsWithReceipts.reduce((sum, sr) => sum + sr.receipts.length, 0);
+  fileCounter.totalFiles += photos.length + documents.length + totalReceiptsForVehicle;
+
   // Add vehicle-info.json under vehicle-data/
   const infoJson = buildVehicleInfoJson(
     vehicle,
@@ -291,7 +297,7 @@ async function addVehicleToZip(
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
-      total: 0,
+      total: fileCounter.totalFiles,
       message: `${vDisplayName}: downloading photo...`,
     });
 
@@ -318,7 +324,7 @@ async function addVehicleToZip(
     onProgress({
       phase: 'Downloading files',
       current: fileCounter.downloaded + fileCounter.skipped,
-      total: 0,
+      total: fileCounter.totalFiles,
       message: `${vDisplayName}: downloading document "${doc.title}"...`,
     });
 
@@ -404,7 +410,7 @@ export async function exportVehicleZip(
   const vehicleFolderName = sanitizeFileName(vDisplayName);
   const rootFolder = sanitizeFileName(`${vDisplayName}-${date}`);
 
-  const fileCounter = { downloaded: 0, skipped: 0, skippedDetails: [] as string[] };
+  const fileCounter = { downloaded: 0, skipped: 0, totalFiles: 0, skippedDetails: [] as string[] };
 
   const exportData = await addVehicleToZip(zip, v, rootFolder, vehicleFolderName, supabase, onProgress, fileCounter, signal);
 
@@ -492,7 +498,7 @@ export async function exportCollectionZip(
   const date = new Date().toISOString().split('T')[0];
   const rootFolder = sanitizeFileName(`${collectionName}-${date}`);
 
-  const fileCounter = { downloaded: 0, skipped: 0, skippedDetails: [] as string[] };
+  const fileCounter = { downloaded: 0, skipped: 0, totalFiles: 0, skippedDetails: [] as string[] };
   const vehicleFolderNames = new Set<string>();
 
   // Accumulate data from each vehicle for comprehensive CSV

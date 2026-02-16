@@ -67,7 +67,7 @@ export function ZipExport({ collections }: ZipExportProps) {
       const { data, error } = await supabase
         .from('motorcycles')
         .select('*')
-        .order('name');
+        .order('make');
 
       if (!error && data) {
         setAllVehicles(data as Motorcycle[]);

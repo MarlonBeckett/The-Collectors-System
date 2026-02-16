@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { ArchiveBoxIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { DocumentType, ServiceCategory } from '@/types/database';
+import { blobWithMime } from '@/lib/mimeTypes';
 import { useSelectedCollection } from '@/hooks/useSelectedCollection';
 
 interface UserCollection {
@@ -237,12 +238,13 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
         setImportProgress(`Uploading ${zipFiles.photos.length} photos...`);
 
         // Determine showcase index from JSON data
-        const showcaseIdx = jsonData.photos?.findIndex(p => p.is_showcase) ?? 0;
+        const showcaseIdx = jsonData.photos?.findIndex(p => p.is_showcase) ?? -1;
 
         for (let i = 0; i < zipFiles.photos.length; i++) {
           const photo = zipFiles.photos[i];
           try {
-            const blob = await photo.entry.async('blob');
+            const rawBlob = await photo.entry.async('blob');
+            const blob = blobWithMime(rawBlob, photo.name);
             const timestamp = Date.now();
             const random = Math.random().toString(36).substring(2, 8);
             const ext = photo.name.split('.').pop() || 'jpg';
@@ -257,7 +259,7 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
                 motorcycle_id: vehicleId,
                 storage_path: storagePath,
                 display_order: i,
-                is_showcase: i === (showcaseIdx >= 0 ? showcaseIdx : 0),
+                is_showcase: showcaseIdx >= 0 && i === showcaseIdx,
               });
             }
           } catch {
@@ -282,7 +284,8 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
             const fileEntry = zipFiles.documents.find(f => f.name === doc.file_name);
             if (fileEntry) {
               try {
-                const blob = await fileEntry.entry.async('blob');
+                const rawBlob = await fileEntry.entry.async('blob');
+                const blob = blobWithMime(rawBlob, doc.file_name);
                 const timestamp = Date.now();
                 const random = Math.random().toString(36).substring(2, 8);
                 const ext = doc.file_name.split('.').pop() || 'bin';
@@ -341,7 +344,8 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
               if (!fileEntry) continue;
 
               try {
-                const blob = await fileEntry.entry.async('blob');
+                const rawBlob = await fileEntry.entry.async('blob');
+                const blob = blobWithMime(rawBlob, receipt.file_name);
                 const timestamp = Date.now();
                 const random = Math.random().toString(36).substring(2, 8);
                 const ext = receipt.file_name.split('.').pop() || 'bin';

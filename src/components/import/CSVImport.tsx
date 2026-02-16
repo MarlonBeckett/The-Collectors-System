@@ -7,6 +7,7 @@ import JSZip from 'jszip';
 import { createClient } from '@/lib/supabase/client';
 import { parseFlexibleDate, formatDateForDB } from '@/lib/dateUtils';
 import { parseStatusFromNotes } from '@/lib/statusParser';
+import { blobWithMime } from '@/lib/mimeTypes';
 import { DocumentArrowUpIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { DocumentType, ServiceCategory } from '@/types/database';
 import { useSelectedCollection } from '@/hooks/useSelectedCollection';
@@ -357,8 +358,14 @@ async function buildZipFileMap(zip: JSZip): Promise<{
     try {
       const jsonText = await entry.async('string');
       const data = JSON.parse(jsonText);
-      const vehicleName = data?.vehicle?.name;
-      if (!vehicleName || !Array.isArray(data.photos)) continue;
+      if (!Array.isArray(data.photos)) continue;
+
+      // Determine vehicle name: use explicit name field, reconstruct from parts, or fall back to JSON filename
+      const v = data?.vehicle;
+      const vehicleName = v?.name
+        || (v?.year && v?.make && v?.model ? [v.year, v.make, v.model, v.sub_model].filter(Boolean).join(' ') : null)
+        || path.split('/').pop()?.replace(/\.json$/, '');
+      if (!vehicleName) continue;
 
       const vehicleFiles = ensureVehicle(vehicleName);
 
@@ -384,7 +391,12 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [preview, setPreview] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<string>('');
+  const [importProgress, setImportProgress] = useState<{
+    phase: string;
+    current: number;
+    total: number;
+    message: string;
+  } | null>(null);
   const [importResult, setImportResult] = useState<{
     success: number;
     failed: number;
@@ -880,7 +892,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
 
   const handleImport = async () => {
     setImporting(true);
-    setImportProgress('Importing vehicles...');
     let success = 0;
     let failed = 0;
     let docsImported = 0;
@@ -892,10 +903,25 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
 
     const validRows = preview.filter((row) => row.valid);
 
+    // Calculate total work items for progress
+    const totalVehicles = validRows.length;
+    const totalDocs = documentRows.length;
+    const totalRecords = serviceRecordRows.length;
+    const totalMileage = mileageRows.length;
+
     // Map of vehicle name -> inserted vehicle id
     const vehicleNameToId = new Map<string, string>();
 
-    for (const row of validRows) {
+    // Phase 1: Import vehicles
+    for (let idx = 0; idx < validRows.length; idx++) {
+      const row = validRows[idx];
+      setImportProgress({
+        phase: 'Importing vehicles',
+        current: idx + 1,
+        total: totalVehicles,
+        message: `${row.mapped.year} ${row.mapped.make} ${row.mapped.model} (${idx + 1}/${totalVehicles})`,
+      });
+
       try {
         const insertData: Record<string, unknown> = {
           make: row.mapped.make,
@@ -946,10 +972,73 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       }
     }
 
-    // Import documents if we have them
+    // Build a reliable vehicleId -> zipFiles map by trying all name variations
+    // zipFileMap keys = ZIP folder names (from export's sanitizeFileName(getVehicleDisplayName()))
+    // vehicleNameToId keys = display names from DB insert + CSV vehicle_name
+    // These can differ, so we build a cross-reference by trying all combinations
+    const vehicleIdToZipFiles = new Map<string, VehicleZipFiles>();
+    if (zipFileMap.size > 0 && vehicleNameToId.size > 0) {
+      // First, try direct key matches from vehicleNameToId -> zipFileMap
+      const matchedZipKeys = new Set<string>();
+      for (const [vName, vId] of vehicleNameToId) {
+        if (vehicleIdToZipFiles.has(vId)) continue;
+        const files = zipFileMap.get(vName);
+        if (files) {
+          vehicleIdToZipFiles.set(vId, files);
+          matchedZipKeys.add(vName);
+        }
+      }
+      // For any unmatched zipFileMap entries, try normalized matching
+      if (matchedZipKeys.size < zipFileMap.size) {
+        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normalizedVehicleNames = new Map<string, string>(); // normalized -> vehicleId
+        for (const [vName, vId] of vehicleNameToId) {
+          const n = normalize(vName);
+          if (!normalizedVehicleNames.has(n)) {
+            normalizedVehicleNames.set(n, vId);
+          }
+        }
+        for (const [zipKey, files] of zipFileMap) {
+          if (matchedZipKeys.has(zipKey)) continue;
+          const n = normalize(zipKey);
+          const vId = normalizedVehicleNames.get(n);
+          if (vId && !vehicleIdToZipFiles.has(vId)) {
+            vehicleIdToZipFiles.set(vId, files);
+          }
+        }
+      }
+    }
+
+    if (zipFileMap.size > 0) {
+      console.log('Import file matching:',
+        `zipFileMap keys: [${Array.from(zipFileMap.keys()).join(', ')}]`,
+        `vehicleNameToId keys: [${Array.from(vehicleNameToId.keys()).join(', ')}]`,
+        `matched: ${vehicleIdToZipFiles.size}/${zipFileMap.size}`
+      );
+    }
+
+    // Also build a reverse lookup for documents/service records that reference vehicle_name
+    const vehicleNameToZipFiles = (name: string): VehicleZipFiles | undefined => {
+      // Try direct match first
+      const direct = zipFileMap.get(name);
+      if (direct) return direct;
+      // Try via vehicleNameToId -> vehicleIdToZipFiles
+      const vId = vehicleNameToId.get(name);
+      if (vId) return vehicleIdToZipFiles.get(vId);
+      return undefined;
+    };
+
+    // Phase 2: Import documents
     if (documentRows.length > 0 && vehicleNameToId.size > 0) {
-      setImportProgress('Importing documents...');
-      for (const doc of documentRows) {
+      for (let idx = 0; idx < documentRows.length; idx++) {
+        const doc = documentRows[idx];
+        setImportProgress({
+          phase: 'Importing documents',
+          current: idx + 1,
+          total: totalDocs,
+          message: `"${doc.title}" (${idx + 1}/${totalDocs})`,
+        });
+
         const vehicleId = vehicleNameToId.get(doc.vehicle_name);
         if (!vehicleId) continue;
 
@@ -963,11 +1052,12 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           let storagePath = '';
 
           // Try to find and upload the document file from ZIP
-          const vehicleFiles = zipFileMap.get(doc.vehicle_name);
+          const vehicleFiles = vehicleNameToZipFiles(doc.vehicle_name);
           if (vehicleFiles && doc.file_name) {
             const fileEntry = vehicleFiles.documents.find(f => f.name === doc.file_name);
             if (fileEntry) {
-              const blob = await fileEntry.entry.async('blob');
+              const rawBlob = await fileEntry.entry.async('blob');
+              const blob = blobWithMime(rawBlob, doc.file_name);
               const timestamp = Date.now();
               const random = Math.random().toString(36).substring(2, 8);
               const ext = doc.file_name.split('.').pop() || 'bin';
@@ -1003,10 +1093,17 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       }
     }
 
-    // Import service records if we have them
+    // Phase 3: Import service records
     if (serviceRecordRows.length > 0 && vehicleNameToId.size > 0) {
-      setImportProgress('Importing service records...');
-      for (const record of serviceRecordRows) {
+      for (let idx = 0; idx < serviceRecordRows.length; idx++) {
+        const record = serviceRecordRows[idx];
+        setImportProgress({
+          phase: 'Importing service records',
+          current: idx + 1,
+          total: totalRecords,
+          message: `"${record.title}" (${idx + 1}/${totalRecords})`,
+        });
+
         const vehicleId = vehicleNameToId.get(record.vehicle_name);
         if (!vehicleId) continue;
 
@@ -1039,7 +1136,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
             // Upload receipt files if we have them
             if (srData && record.receipt_files) {
               const receiptFileNames = record.receipt_files.split(',').map(f => f.trim()).filter(Boolean);
-              const vehicleFiles = zipFileMap.get(record.vehicle_name);
+              const vehicleFiles = vehicleNameToZipFiles(record.vehicle_name);
 
               if (vehicleFiles && receiptFileNames.length > 0) {
                 for (const receiptFileName of receiptFileNames) {
@@ -1047,7 +1144,8 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
                   if (!fileEntry) continue;
 
                   try {
-                    const blob = await fileEntry.entry.async('blob');
+                    const rawBlob = await fileEntry.entry.async('blob');
+                    const blob = blobWithMime(rawBlob, receiptFileName);
                     const timestamp = Date.now();
                     const random = Math.random().toString(36).substring(2, 8);
                     const ext = receiptFileName.split('.').pop() || 'bin';
@@ -1079,10 +1177,17 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       }
     }
 
-    // Import mileage history if we have it
+    // Phase 4: Import mileage history
     if (mileageRows.length > 0 && vehicleNameToId.size > 0) {
-      setImportProgress('Importing mileage history...');
-      for (const entry of mileageRows) {
+      for (let idx = 0; idx < mileageRows.length; idx++) {
+        const entry = mileageRows[idx];
+        setImportProgress({
+          phase: 'Importing mileage history',
+          current: idx + 1,
+          total: totalMileage,
+          message: `${entry.vehicle_name} (${idx + 1}/${totalMileage})`,
+        });
+
         const vehicleId = vehicleNameToId.get(entry.vehicle_name);
         if (!vehicleId) continue;
 
@@ -1108,22 +1213,32 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       }
     }
 
-    // Import photos from ZIP if we have them
-    if (zipFileMap.size > 0 && vehicleNameToId.size > 0) {
-      setImportProgress('Uploading photos...');
-      for (const [vehicleName, vehicleId] of vehicleNameToId) {
-        const vehicleFiles = zipFileMap.get(vehicleName);
-        if (!vehicleFiles || vehicleFiles.photos.length === 0) continue;
+    // Phase 5: Import photos from ZIP using the pre-built vehicleIdToZipFiles map
+    if (vehicleIdToZipFiles.size > 0) {
+      const photoEntries: { vehicleId: string; files: VehicleZipFiles }[] = [];
+      for (const [vehicleId, files] of vehicleIdToZipFiles) {
+        if (files.photos.length > 0) {
+          photoEntries.push({ vehicleId, files });
+        }
+      }
 
-        // Use showcase info from vehicle-data JSON if available, otherwise default to first photo
-        const showcaseIdx = vehicleFiles.showcasePhotoIndex >= 0
-          ? vehicleFiles.showcasePhotoIndex
-          : 0;
+      let photosDone = 0;
+      for (const { vehicleId, files: vehicleFiles } of photoEntries) {
+        const showcaseIdx = vehicleFiles.showcasePhotoIndex;
 
         for (let i = 0; i < vehicleFiles.photos.length; i++) {
           const photo = vehicleFiles.photos[i];
+          photosDone++;
+          setImportProgress({
+            phase: 'Uploading photos',
+            current: photosDone,
+            total: totalPhotos,
+            message: `${photo.name} (${photosDone}/${totalPhotos})`,
+          });
+
           try {
-            const blob = await photo.entry.async('blob');
+            const rawBlob = await photo.entry.async('blob');
+            const blob = blobWithMime(rawBlob, photo.name);
             const timestamp = Date.now();
             const random = Math.random().toString(36).substring(2, 8);
             const ext = photo.name.split('.').pop() || 'jpg';
@@ -1133,17 +1248,23 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
               .from('motorcycle-photos')
               .upload(storagePath, blob);
 
-            if (!uploadError) {
-              await supabase.from('photos').insert({
+            if (uploadError) {
+              console.error('Photo storage upload failed:', uploadError.message, storagePath);
+            } else {
+              const { error: insertError } = await supabase.from('photos').insert({
                 motorcycle_id: vehicleId,
                 storage_path: storagePath,
                 display_order: i,
                 is_showcase: i === showcaseIdx,
               });
-              photosImported++;
+              if (insertError) {
+                console.error('Photo DB insert failed:', insertError.message, storagePath);
+              } else {
+                photosImported++;
+              }
             }
-          } catch {
-            // Skip failed photo upload
+          } catch (err) {
+            console.error('Photo import error:', err);
           }
         }
       }
@@ -1160,7 +1281,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       receiptFiles: receiptFilesImported,
     });
     setImporting(false);
-    setImportProgress('');
+    setImportProgress(null);
     setStep('done');
   };
 
@@ -1177,7 +1298,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
     zipRef.current = null;
     setZipFileMap(new Map());
     setLimitError(null);
-    setImportProgress('');
+    setImportProgress(null);
     setStep('upload');
   };
 
@@ -1393,9 +1514,27 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           )}
 
           {importing && importProgress && (
-            <div className="bg-card border border-border p-4">
-              <p className="text-sm text-muted-foreground">{importProgress}</p>
-              <p className="text-xs text-destructive font-medium mt-2">Don&apos;t leave this page or progress will be lost. This may take a little while.</p>
+            <div className="bg-card border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{importProgress.phase}</span>
+                {importProgress.total > 0 && (
+                  <span className="text-muted-foreground tabular-nums">
+                    {importProgress.current}/{importProgress.total}
+                  </span>
+                )}
+              </div>
+              {importProgress.total > 0 && (
+                <div className="w-full bg-muted h-2 overflow-hidden">
+                  <div
+                    className="bg-primary h-full transition-all duration-300"
+                    style={{
+                      width: `${Math.round((importProgress.current / importProgress.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground truncate">{importProgress.message}</p>
+              <p className="text-xs text-destructive font-medium">Don&apos;t leave this page or progress will be lost.</p>
             </div>
           )}
 
