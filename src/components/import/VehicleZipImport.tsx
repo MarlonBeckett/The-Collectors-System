@@ -17,8 +17,14 @@ interface UserCollection {
   is_owner: boolean;
 }
 
+interface CollectionCapacity {
+  canAdd: boolean;
+  reason: string | null;
+}
+
 interface VehicleZipImportProps {
   collections: UserCollection[];
+  collectionCapacity?: Record<string, CollectionCapacity>;
 }
 
 interface VehicleJsonData {
@@ -101,7 +107,7 @@ interface ZipFiles {
 const VALID_DOC_TYPES: DocumentType[] = ['title', 'registration', 'insurance', 'receipt', 'manual', 'other'];
 const VALID_SERVICE_CATEGORIES: ServiceCategory[] = ['maintenance', 'repair', 'upgrade', 'inspection'];
 
-export function VehicleZipImport({ collections }: VehicleZipImportProps) {
+export function VehicleZipImport({ collections, collectionCapacity }: VehicleZipImportProps) {
   const [jsonData, setJsonData] = useState<VehicleJsonData | null>(null);
   const [zipFiles, setZipFiles] = useState<ZipFiles>({ photos: [], documents: [], receipts: [] });
   const [importing, setImporting] = useState(false);
@@ -226,7 +232,11 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
       }).select('id').single();
 
       if (vehicleError || !vehicleData) {
-        setError(`Failed to create vehicle: ${vehicleError?.message || 'Unknown error'}`);
+        if (vehicleError?.message?.includes('Vehicle limit reached')) {
+          setError('This collection has reached its vehicle limit. The collection owner needs to upgrade to Pro for unlimited vehicles.');
+        } else {
+          setError(`Failed to create vehicle: ${vehicleError?.message || 'Unknown error'}`);
+        }
         setImporting(false);
         return;
       }
@@ -470,6 +480,12 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
           </div>
         )}
 
+        {collectionCapacity && !collectionCapacity[selectedCollectionId]?.canAdd && (
+          <p className="text-sm text-destructive">
+            {collectionCapacity[selectedCollectionId]?.reason}
+          </p>
+        )}
+
         {error && (
           <p className="text-sm text-destructive">{error}</p>
         )}
@@ -481,7 +497,7 @@ export function VehicleZipImport({ collections }: VehicleZipImportProps) {
         <div className="flex gap-3">
           <button
             onClick={handleImport}
-            disabled={importing}
+            disabled={importing || (!!collectionCapacity && !collectionCapacity[selectedCollectionId]?.canAdd)}
             className="flex-1 py-3 px-4 bg-primary text-primary-foreground font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {importing ? 'Importing...' : 'Import Vehicle'}

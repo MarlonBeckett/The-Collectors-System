@@ -165,7 +165,11 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
       }).select('id').single();
 
       if (vehicleError || !vehicleData) {
-        setError(`Failed to create vehicle: ${vehicleError?.message || 'Unknown error'}`);
+        if (vehicleError?.message?.includes('Vehicle limit reached')) {
+          setError('This collection has reached its vehicle limit. The collection owner needs to upgrade to Pro for unlimited vehicles.');
+        } else {
+          setError(`Failed to create vehicle: ${vehicleError?.message || 'Unknown error'}`);
+        }
         setImporting(false);
         return;
       }

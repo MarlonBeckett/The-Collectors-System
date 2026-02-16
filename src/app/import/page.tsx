@@ -2,15 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ImportPageContent } from './ImportPageContent';
-import { getUserSubscription } from '@/lib/subscription.server';
-import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
-
-interface UserCollection {
-  id: string;
-  name: string;
-  is_owner: boolean;
-  role: string;
-}
+import { canAddVehiclesToCollection } from '@/lib/subscription.server';
+import { FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
 export default async function ImportPage() {
   const supabase = await createClient();
@@ -38,27 +31,15 @@ export default async function ImportPage() {
     is_owner: c.is_owner,
   }));
 
-  // Get subscription info for vehicle limits
-  const subscription = await getUserSubscription();
-  const isProUser = isPro(subscription);
-
-  // Get owned collection IDs to count vehicles
-  const ownedCollectionIds = allCollections
-    .filter(c => c.is_owner)
-    .map(c => c.id);
-
-  let vehicleCount = 0;
-  if (ownedCollectionIds.length > 0) {
-    const { count } = await supabase
-      .from('motorcycles')
-      .select('*', { count: 'exact', head: true })
-      .in('collection_id', ownedCollectionIds);
-    vehicleCount = count || 0;
-  }
+  // Check vehicle capacity for each editable collection based on collection owner's subscription
+  // Use the first collection that has capacity (or fall back to the first collection's owner info)
+  // We check the default collection (first one) for the subscription info passed to ImportPageContent
+  const defaultCollection = collections[0];
+  const capacity = await canAddVehiclesToCollection(defaultCollection.id);
 
   const subscriptionInfo = {
-    isPro: isProUser,
-    vehicleCount,
+    isPro: capacity.ownerIsPro,
+    vehicleCount: capacity.currentCount,
     vehicleLimit: FREE_VEHICLE_LIMIT,
   };
 

@@ -16,11 +16,20 @@ interface EditableCollection {
   is_owner: boolean;
 }
 
+interface CollectionCapacity {
+  canAdd: boolean;
+  reason: string | null;
+  ownerIsPro: boolean;
+  currentCount: number;
+  limit: number;
+}
+
 interface VehicleFormProps {
   vehicle?: Motorcycle;
   mode: 'create' | 'edit';
   collectionId?: string;
   collections?: EditableCollection[];
+  collectionCapacity?: Record<string, CollectionCapacity>;
 }
 
 const vehicleTypes: { value: VehicleType; label: string }[] = [
@@ -39,7 +48,7 @@ const placeholders: Record<VehicleType, { make: string; model: string; subModel:
   other: { make: 'e.g., Honda', model: 'e.g., HRX217', subModel: '', nickname: 'e.g., Lawn Mower, Generator' },
 };
 
-export function VehicleForm({ vehicle, mode, collectionId, collections }: VehicleFormProps) {
+export function VehicleForm({ vehicle, mode, collectionId, collections, collectionCapacity }: VehicleFormProps) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -118,7 +127,12 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('Vehicle limit reached')) {
+            throw new Error('This collection has reached its vehicle limit. The collection owner needs to upgrade to Pro for unlimited vehicles.');
+          }
+          throw error;
+        }
 
         // Add mileage history entry if mileage was provided
         if (mileageNum) {
@@ -227,18 +241,28 @@ export function VehicleForm({ vehicle, mode, collectionId, collections }: Vehicl
               {collections[0].name}{collections[0].is_owner ? ' (Owner)' : ''}
             </div>
           ) : (
-            <select
-              id="collection"
-              value={selectedCollectionId || ''}
-              onChange={(e) => setSelectedCollectionId(e.target.value)}
-              className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}{collection.is_owner ? ' (Owner)' : ''}
-                </option>
-              ))}
-            </select>
+            <>
+              <select
+                id="collection"
+                value={selectedCollectionId || ''}
+                onChange={(e) => setSelectedCollectionId(e.target.value)}
+                className="w-full px-4 py-3 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {collections.map((collection) => {
+                  const atCapacity = collectionCapacity && !collectionCapacity[collection.id]?.canAdd;
+                  return (
+                    <option key={collection.id} value={collection.id} disabled={!!atCapacity}>
+                      {collection.name}{collection.is_owner ? ' (Owner)' : ''}{atCapacity ? ' (limit reached)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedCollectionId && collectionCapacity && !collectionCapacity[selectedCollectionId]?.canAdd && (
+                <p className="text-sm text-destructive mt-1">
+                  {collectionCapacity[selectedCollectionId]?.reason}
+                </p>
+              )}
+            </>
           )}
         </div>
       )}

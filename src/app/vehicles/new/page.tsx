@@ -5,8 +5,8 @@ import { VehicleZipImport } from '@/components/import/VehicleZipImport';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
-import { getUserSubscription } from '@/lib/subscription.server';
-import { isPro, FREE_VEHICLE_LIMIT } from '@/lib/subscription';
+import { canAddVehiclesToCollection, CollectionCapacity } from '@/lib/subscription.server';
+import { FREE_VEHICLE_LIMIT } from '@/lib/subscription';
 
 export default async function NewVehiclePage() {
   const supabase = await createClient();
@@ -31,25 +31,13 @@ export default async function NewVehiclePage() {
     redirect('/dashboard');
   }
 
-  // Get subscription and check vehicle limit
-  const subscription = await getUserSubscription();
-  const isProUser = isPro(subscription);
-
-  // Get owned collection IDs to count vehicles
-  const ownedCollectionIds = (allCollections || [])
-    .filter((c: { is_owner: boolean }) => c.is_owner)
-    .map((c: { id: string }) => c.id);
-
-  let vehicleCount = 0;
-  if (ownedCollectionIds.length > 0) {
-    const { count } = await supabase
-      .from('motorcycles')
-      .select('*', { count: 'exact', head: true })
-      .in('collection_id', ownedCollectionIds);
-    vehicleCount = count || 0;
+  // Check vehicle capacity for each editable collection based on collection owner's subscription
+  const capacityMap: Record<string, CollectionCapacity> = {};
+  for (const c of editableCollections) {
+    capacityMap[c.id] = await canAddVehiclesToCollection(c.id);
   }
 
-  const atLimit = !isProUser && vehicleCount >= FREE_VEHICLE_LIMIT;
+  const atLimit = editableCollections.every((c: { id: string }) => !capacityMap[c.id].canAdd);
 
   if (atLimit) {
     return (
@@ -83,11 +71,11 @@ export default async function NewVehiclePage() {
               </svg>
             </div>
             <h2 className="text-xl font-semibold mb-2">
-              Free Limit Reached
+              Vehicle Limit Reached
             </h2>
             <p className="text-muted-foreground mb-6">
-              You&apos;ve reached the free limit of {FREE_VEHICLE_LIMIT} vehicles.
-              Upgrade to Pro for unlimited vehicles.
+              All your editable collections have reached the free limit of {FREE_VEHICLE_LIMIT} vehicles.
+              Collection owners need to upgrade to Pro for unlimited vehicles.
             </p>
             <Link
               href="/settings#subscription"
@@ -114,12 +102,12 @@ export default async function NewVehiclePage() {
           <h1 className="text-2xl font-bold text-foreground">Add Vehicle</h1>
         </div>
 
-        <VehicleForm mode="create" collections={editableCollections} />
+        <VehicleForm mode="create" collections={editableCollections} collectionCapacity={capacityMap} />
 
         {/* ZIP Import Section */}
         <div className="mt-8 pt-6 border-t border-border">
           <h2 className="text-lg font-semibold text-foreground mb-4">Already have a TCS export?</h2>
-          <VehicleZipImport collections={editableCollections} />
+          <VehicleZipImport collections={editableCollections} collectionCapacity={capacityMap} />
         </div>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
