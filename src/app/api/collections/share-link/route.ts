@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { collectionId } = await request.json();
+    const { collectionId, name } = await request.json();
     if (!collectionId) {
       return NextResponse.json({ error: 'Collection ID is required' }, { status: 400 });
     }
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
         collection_id: collectionId,
         token,
         created_by: user.id,
+        ...(name ? { name: name.trim() } : {}),
       })
       .select()
       .single();

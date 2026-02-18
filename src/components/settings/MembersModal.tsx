@@ -8,6 +8,7 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
   TrashIcon,
+  PencilIcon,
 } from '@heroicons/react/24/outline';
 import { CollectionShareLink } from '@/types/database';
 
@@ -42,6 +43,9 @@ export function MembersModal({
   const [togglingLink, setTogglingLink] = useState<string | null>(null);
   const [deletingLink, setDeletingLink] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -179,6 +183,31 @@ export function MembersModal({
     setTimeout(() => setCopiedLinkId(null), 2000);
   };
 
+  const startEditingName = (link: CollectionShareLink) => {
+    setEditingLinkId(link.id);
+    setEditingName(link.name || '');
+  };
+
+  const saveLinkName = async (linkId: string) => {
+    setSavingName(true);
+    try {
+      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingName }),
+      });
+
+      if (response.ok) {
+        setShareLinks(links =>
+          links.map(l => l.id === linkId ? { ...l, name: editingName.trim() || null } : l)
+        );
+      }
+    } finally {
+      setSavingName(false);
+      setEditingLinkId(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-card border border-border w-full max-w-md max-h-[80vh] flex flex-col">
@@ -262,48 +291,96 @@ export function MembersModal({
                 {shareLinks.map((link) => (
                   <div
                     key={link.id}
-                    className="flex items-center gap-2 py-2 px-2 bg-muted/50 rounded"
+                    className="py-2 px-2 bg-muted/50 rounded space-y-1.5"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-mono truncate text-muted-foreground">
-                        /share/{link.token.slice(0, 8)}...
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        {editingLinkId === link.id ? (
+                          <form
+                            onSubmit={(e) => { e.preventDefault(); saveLinkName(link.id); }}
+                            className="flex items-center gap-1"
+                          >
+                            <input
+                              type="text"
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              placeholder="Link name"
+                              className="w-full text-sm px-2 py-1 border border-border bg-background focus:outline-none focus:border-primary"
+                              maxLength={100}
+                              autoFocus
+                              onKeyDown={(e) => { if (e.key === 'Escape') setEditingLinkId(null); }}
+                            />
+                            <button
+                              type="submit"
+                              disabled={savingName}
+                              className="p-1 hover:bg-muted rounded transition-colors shrink-0"
+                              title="Save"
+                            >
+                              <CheckIcon className="w-4 h-4 text-secondary" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingLinkId(null)}
+                              className="p-1 hover:bg-muted rounded transition-colors shrink-0"
+                              title="Cancel"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium truncate">
+                              {link.name || <span className="text-muted-foreground italic">Unnamed</span>}
+                            </span>
+                            <button
+                              onClick={() => startEditingName(link)}
+                              className="p-0.5 hover:bg-muted rounded transition-colors shrink-0"
+                              title="Edit name"
+                            >
+                              <PencilIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                            </button>
+                          </div>
+                        )}
+                        <div className="text-xs font-mono truncate text-muted-foreground">
+                          /share/{link.token.slice(0, 8)}...
+                        </div>
                       </div>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded shrink-0 ${
+                          link.is_active
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {link.is_active ? 'active' : 'disabled'}
+                      </span>
+                      <button
+                        onClick={() => copyShareUrl(link.token, link.id)}
+                        className="p-1.5 hover:bg-muted rounded transition-colors shrink-0"
+                        title="Copy link"
+                      >
+                        {copiedLinkId === link.id ? (
+                          <CheckIcon className="w-4 h-4 text-secondary" />
+                        ) : (
+                          <ClipboardDocumentIcon className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => toggleShareLink(link.id, link.is_active)}
+                        disabled={togglingLink === link.id}
+                        className="text-xs px-2 py-1 border border-border hover:bg-muted rounded transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {link.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={() => deleteShareLink(link.id)}
+                        disabled={deletingLink === link.id}
+                        className="p-1.5 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 shrink-0"
+                        title="Delete link"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
                     </div>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded shrink-0 ${
-                        link.is_active
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {link.is_active ? 'active' : 'disabled'}
-                    </span>
-                    <button
-                      onClick={() => copyShareUrl(link.token, link.id)}
-                      className="p-1.5 hover:bg-muted rounded transition-colors shrink-0"
-                      title="Copy link"
-                    >
-                      {copiedLinkId === link.id ? (
-                        <CheckIcon className="w-4 h-4 text-secondary" />
-                      ) : (
-                        <ClipboardDocumentIcon className="w-4 h-4" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => toggleShareLink(link.id, link.is_active)}
-                      disabled={togglingLink === link.id}
-                      className="text-xs px-2 py-1 border border-border hover:bg-muted rounded transition-colors disabled:opacity-50 shrink-0"
-                    >
-                      {link.is_active ? 'Disable' : 'Enable'}
-                    </button>
-                    <button
-                      onClick={() => deleteShareLink(link.id)}
-                      disabled={deletingLink === link.id}
-                      className="p-1.5 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 shrink-0"
-                      title="Delete link"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
                   </div>
                 ))}
               </div>

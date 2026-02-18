@@ -187,6 +187,7 @@ export interface CollectionShareLink {
   id: string;
   collection_id: string;
   token: string;
+  name: string | null;
   created_by: string;
   created_at: string;
   is_active: boolean;

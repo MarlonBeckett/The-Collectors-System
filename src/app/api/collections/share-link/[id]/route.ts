@@ -15,7 +15,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { is_active } = await request.json();
+    const body = await request.json();
+    const { is_active, name } = body;
 
     // Fetch the share link and verify ownership
     const { data: shareLink } = await supabase
@@ -38,9 +39,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
+    const updates: Record<string, unknown> = {};
+    if (typeof is_active === 'boolean') updates.is_active = is_active;
+    if (typeof name === 'string') updates.name = name.trim() || null;
+
     const { error: updateError } = await supabase
       .from('collection_share_links')
-      .update({ is_active })
+      .update(updates)
       .eq('id', id);
 
     if (updateError) {

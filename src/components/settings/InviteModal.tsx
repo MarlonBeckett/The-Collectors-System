@@ -17,6 +17,7 @@ type InviteRole = 'editor' | 'viewer' | 'quick_view';
 
 export function InviteModal({ collectionId, onClose }: InviteModalProps) {
   const [role, setRole] = useState<InviteRole>('editor');
+  const [linkName, setLinkName] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export function InviteModal({ collectionId, onClose }: InviteModalProps) {
         const response = await fetch('/api/collections/share-link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collectionId }),
+          body: JSON.stringify({ collectionId, ...(linkName.trim() ? { name: linkName.trim() } : {}) }),
         });
 
         const data = await response.json();
@@ -90,6 +91,7 @@ export function InviteModal({ collectionId, onClose }: InviteModalProps) {
     setShareUrl(null);
     setExpiresAt(null);
     setCopied(false);
+    setLinkName('');
   };
 
   const hasResult = inviteCode || shareUrl;
@@ -165,6 +167,22 @@ export function InviteModal({ collectionId, onClose }: InviteModalProps) {
                   </button>
                 </div>
               </div>
+
+              {role === 'quick_view' && (
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">
+                    Link Name <span className="text-xs">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={linkName}
+                    onChange={(e) => setLinkName(e.target.value)}
+                    placeholder="e.g. For Instagram, For Dad"
+                    className="w-full px-3 py-2 border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                    maxLength={100}
+                  />
+                </div>
+              )}
 
               {error && (
                 <div className="text-sm text-destructive">{error}</div>

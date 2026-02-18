@@ -3,9 +3,42 @@ import { notFound } from 'next/navigation';
 import { Motorcycle, Photo, MileageHistory, ServiceRecord, ServiceRecordReceipt, VehicleDocument } from '@/types/database';
 import { ShareShell } from '@/components/share/ShareShell';
 import { VehicleDetailContent } from '@/components/vehicles/VehicleDetailContent';
+import type { Metadata } from 'next';
 
 interface ShareVehiclePageProps {
   params: Promise<{ token: string; id: string }>;
+}
+
+export async function generateMetadata({ params }: ShareVehiclePageProps): Promise<Metadata> {
+  const { token, id } = await params;
+  const supabase = createAdminClient();
+
+  const { data: shareLink } = await supabase
+    .from('collection_share_links')
+    .select('collection_id, is_active')
+    .eq('token', token)
+    .single();
+
+  if (!shareLink || !shareLink.is_active) {
+    return { title: 'Shared Vehicle' };
+  }
+
+  const { data: vehicle } = await supabase
+    .from('motorcycles')
+    .select('year, make, model')
+    .eq('id', id)
+    .eq('collection_id', shareLink.collection_id)
+    .single();
+
+  if (!vehicle) {
+    return { title: 'Shared Vehicle' };
+  }
+
+  const title = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Shared Vehicle';
+  return {
+    title,
+    openGraph: { title },
+  };
 }
 
 export default async function ShareVehiclePage({ params }: ShareVehiclePageProps) {

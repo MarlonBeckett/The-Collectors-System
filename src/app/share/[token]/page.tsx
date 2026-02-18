@@ -3,9 +3,37 @@ import { notFound } from 'next/navigation';
 import { Motorcycle } from '@/types/database';
 import { ShareShell } from '@/components/share/ShareShell';
 import { ShareVehicleList } from '@/components/share/ShareVehicleList';
+import type { Metadata } from 'next';
 
 interface SharePageProps {
   params: Promise<{ token: string }>;
+}
+
+export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+  const { token } = await params;
+  const supabase = createAdminClient();
+
+  const { data: shareLink } = await supabase
+    .from('collection_share_links')
+    .select('collection_id, is_active')
+    .eq('token', token)
+    .single();
+
+  if (!shareLink || !shareLink.is_active) {
+    return { title: 'Shared Collection' };
+  }
+
+  const { data: collection } = await supabase
+    .from('collections')
+    .select('name')
+    .eq('id', shareLink.collection_id)
+    .single();
+
+  const title = collection?.name || 'Shared Collection';
+  return {
+    title,
+    openGraph: { title },
+  };
 }
 
 export default async function SharePage({ params }: SharePageProps) {
