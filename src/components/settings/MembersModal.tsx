@@ -2,11 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { XMarkIcon, UserMinusIcon } from '@heroicons/react/24/outline';
+import {
+  XMarkIcon,
+  UserMinusIcon,
+  ClipboardDocumentIcon,
+  CheckIcon,
+  TrashIcon,
+} from '@heroicons/react/24/outline';
+import { CollectionShareLink } from '@/types/database';
 
 interface Member {
   user_id: string;
   role: string;
+  intended_role: string | null;
   email: string | null;
   username: string | null;
   isCurrentUser: boolean;
@@ -28,20 +36,24 @@ export function MembersModal({
   onMemberRemoved,
 }: MembersModalProps) {
   const [members, setMembers] = useState<Member[]>([]);
+  const [shareLinks, setShareLinks] = useState<CollectionShareLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const [togglingLink, setTogglingLink] = useState<string | null>(null);
+  const [deletingLink, setDeletingLink] = useState<string | null>(null);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchMembers() {
+    async function fetchData() {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id;
 
-      // Fetch members first
+      // Fetch members
       const { data: membersData, error: membersError } = await supabase
         .from('collection_members')
-        .select('user_id, role')
+        .select('user_id, role, intended_role')
         .eq('collection_id', collectionId);
 
       if (membersError || !membersData) {
@@ -56,24 +68,22 @@ export function MembersModal({
         .select('id, email, username')
         .in('id', userIds);
 
-      // Create a map of user_id to profile
       const profileMap = new Map(
         (profilesData || []).map((p) => [p.id, p])
       );
 
-      // Combine members with profiles
       const formatted = membersData
         .map((m) => {
           const profile = profileMap.get(m.user_id);
           return {
             user_id: m.user_id,
             role: m.role,
+            intended_role: m.intended_role || null,
             email: profile?.email || null,
             username: profile?.username || null,
             isCurrentUser: m.user_id === currentUserId,
           };
         })
-        // Sort: owner first, then current user, then others
         .sort((a, b) => {
           if (a.role === 'owner') return -1;
           if (b.role === 'owner') return 1;
@@ -82,11 +92,23 @@ export function MembersModal({
           return 0;
         });
       setMembers(formatted);
+
+      // Fetch share links (owner only)
+      if (isOwner) {
+        const { data: linksData } = await supabase
+          .from('collection_share_links')
+          .select('*')
+          .eq('collection_id', collectionId)
+          .order('created_at', { ascending: false });
+
+        setShareLinks((linksData || []) as CollectionShareLink[]);
+      }
+
       setLoading(false);
     }
 
-    fetchMembers();
-  }, [collectionId, supabase]);
+    fetchData();
+  }, [collectionId, supabase, isOwner]);
 
   const removeMember = async (memberId: string) => {
     if (!isOwner) return;
@@ -110,6 +132,51 @@ export function MembersModal({
     } finally {
       setRemovingMember(null);
     }
+  };
+
+  const toggleShareLink = async (linkId: string, currentActive: boolean) => {
+    setTogglingLink(linkId);
+    try {
+      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !currentActive }),
+      });
+
+      if (response.ok) {
+        setShareLinks(links =>
+          links.map(l => l.id === linkId ? { ...l, is_active: !currentActive } : l)
+        );
+      }
+    } finally {
+      setTogglingLink(null);
+    }
+  };
+
+  const deleteShareLink = async (linkId: string) => {
+    if (!confirm('Are you sure you want to delete this share link? This cannot be undone.')) {
+      return;
+    }
+
+    setDeletingLink(linkId);
+    try {
+      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setShareLinks(links => links.filter(l => l.id !== linkId));
+      }
+    } finally {
+      setDeletingLink(null);
+    }
+  };
+
+  const copyShareUrl = async (token: string, linkId: string) => {
+    const url = `${window.location.origin}/share/${token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedLinkId(linkId);
+    setTimeout(() => setCopiedLinkId(null), 2000);
   };
 
   return (
@@ -166,6 +233,11 @@ export function MembersModal({
                     >
                       {member.role}
                     </span>
+                    {member.intended_role === 'editor' && member.role === 'viewer' && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                        pending editor
+                      </span>
+                    )}
                     {isOwner && member.role !== 'owner' && (
                       <button
                         onClick={() => removeMember(member.user_id)}
@@ -179,6 +251,62 @@ export function MembersModal({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Share Links Section (owner only) */}
+          {isOwner && !loading && shareLinks.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-border">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Share Links</h3>
+              <div className="space-y-3">
+                {shareLinks.map((link) => (
+                  <div
+                    key={link.id}
+                    className="flex items-center gap-2 py-2 px-2 bg-muted/50 rounded"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-mono truncate text-muted-foreground">
+                        /share/{link.token.slice(0, 8)}...
+                      </div>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded shrink-0 ${
+                        link.is_active
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {link.is_active ? 'active' : 'disabled'}
+                    </span>
+                    <button
+                      onClick={() => copyShareUrl(link.token, link.id)}
+                      className="p-1.5 hover:bg-muted rounded transition-colors shrink-0"
+                      title="Copy link"
+                    >
+                      {copiedLinkId === link.id ? (
+                        <CheckIcon className="w-4 h-4 text-secondary" />
+                      ) : (
+                        <ClipboardDocumentIcon className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => toggleShareLink(link.id, link.is_active)}
+                      disabled={togglingLink === link.id}
+                      className="text-xs px-2 py-1 border border-border hover:bg-muted rounded transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      {link.is_active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button
+                      onClick={() => deleteShareLink(link.id)}
+                      disabled={deletingLink === link.id}
+                      className="p-1.5 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 shrink-0"
+                      title="Delete link"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

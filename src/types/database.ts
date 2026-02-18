@@ -183,6 +183,16 @@ export interface ServiceRecordWithReceipts extends ServiceRecord {
   receipts: ServiceRecordReceipt[];
 }
 
+export interface CollectionShareLink {
+  id: string;
+  collection_id: string;
+  token: string;
+  created_by: string;
+  created_at: string;
+  is_active: boolean;
+  last_accessed_at: string | null;
+}
+
 export interface ChatSession {
   id: string;
   user_id: string;

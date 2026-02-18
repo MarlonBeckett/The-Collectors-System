@@ -31,6 +31,7 @@ interface VehicleDetailContentProps {
   documentUrls: Record<string, string>;
   receiptUrls: Record<string, string>;
   canEdit: boolean;
+  backHref?: string;
 }
 
 export function VehicleDetailContent({
@@ -43,6 +44,7 @@ export function VehicleDetailContent({
   documentUrls,
   receiptUrls,
   canEdit,
+  backHref,
 }: VehicleDetailContentProps) {
   const hasPhotos = photos.length > 0;
   const [revealed, setRevealed] = useState(!hasPhotos);
@@ -76,7 +78,7 @@ export function VehicleDetailContent({
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
             <Link
-              href="/dashboard"
+              href={backHref ?? '/dashboard'}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
             >
               <ArrowLeftIcon className="w-5 h-5" />

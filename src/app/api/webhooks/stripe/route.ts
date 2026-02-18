@@ -63,6 +63,14 @@ export async function POST(request: NextRequest) {
             cancel_at_period_end: subscription.cancel_at_period_end,
           }, { onConflict: 'user_id' });
 
+        // Promote viewer→editor where intended_role='editor'
+        await supabase
+          .from('collection_members')
+          .update({ role: 'editor', intended_role: null })
+          .eq('user_id', userId)
+          .eq('role', 'viewer')
+          .eq('intended_role', 'editor');
+
         break;
       }
 
@@ -110,6 +118,13 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
 
+        // Fetch user_id before nulling stripe_subscription_id
+        const { data: deletedSub } = await supabase
+          .from('subscriptions')
+          .select('user_id')
+          .eq('stripe_subscription_id', subscription.id)
+          .single();
+
         await supabase
           .from('subscriptions')
           .update({
@@ -118,6 +133,15 @@ export async function POST(request: NextRequest) {
             cancel_at_period_end: false,
           })
           .eq('stripe_subscription_id', subscription.id);
+
+        // Demote editors to viewers with intended_role
+        if (deletedSub?.user_id) {
+          await supabase
+            .from('collection_members')
+            .update({ role: 'viewer', intended_role: 'editor' })
+            .eq('user_id', deletedSub.user_id)
+            .eq('role', 'editor');
+        }
 
         break;
       }

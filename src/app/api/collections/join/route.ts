@@ -53,6 +53,8 @@ export async function POST(request: NextRequest) {
       collection_id?: string;
       collection_name?: string;
       role?: string;
+      intended_role?: string | null;
+      downgraded?: boolean;
     };
 
     if (result.error) {
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest) {
         name: result.collection_name,
       },
       role: result.role,
+      intendedRole: result.intended_role,
+      downgraded: result.downgraded,
     });
   } catch (error) {
     console.error('Join collection error:', error);

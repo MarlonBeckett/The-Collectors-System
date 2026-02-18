@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Collection } from '@/types/database';
 import { MembersModal } from './MembersModal';
@@ -9,6 +9,7 @@ import {
   UserPlusIcon,
   TrashIcon,
   ChevronRightIcon,
+  PencilIcon,
 } from '@heroicons/react/24/outline';
 
 interface CollectionSettingsProps {
@@ -30,7 +31,42 @@ export function CollectionSettings({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [currentMemberCount, setCurrentMemberCount] = useState(memberCount);
 
+  // Rename state
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState(collection.name);
+  const [savingName, setSavingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   const supabase = createClient();
+
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
+
+  const handleSaveName = async () => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === collection.name) {
+      setEditName(collection.name);
+      setEditingName(false);
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      await supabase
+        .from('collections')
+        .update({ name: trimmed })
+        .eq('id', collection.id);
+
+      setEditingName(false);
+      onUpdate();
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   const leaveCollection = async () => {
     if (isOwner) return;
@@ -101,8 +137,50 @@ export function CollectionSettings({
         {/* Header: Name + Member Count */}
         <div className="p-4 flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-lg truncate">{collection.name}</h3>
-            {isOwner && (
+            {editingName ? (
+              <div className="flex gap-2">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveName();
+                    if (e.key === 'Escape') { setEditName(collection.name); setEditingName(false); }
+                  }}
+                  className="flex-1 px-2 py-1 text-base sm:text-sm bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring"
+                  maxLength={100}
+                  disabled={savingName}
+                />
+                <button
+                  onClick={handleSaveName}
+                  disabled={savingName || !editName.trim()}
+                  className="px-2 py-1 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {savingName ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setEditName(collection.name); setEditingName(false); }}
+                  className="px-2 py-1 text-xs border border-border hover:bg-muted"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-semibold text-lg truncate">{collection.name}</h3>
+                {isOwner && (
+                  <button
+                    onClick={() => { setEditName(collection.name); setEditingName(true); }}
+                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    title="Edit collection name"
+                  >
+                    <PencilIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            {isOwner && !editingName && (
               <span className="text-xs text-muted-foreground">Owner</span>
             )}
           </div>

@@ -7,7 +7,7 @@ export function JoinCollection() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ name: string; role: string } | null>(null);
+  const [success, setSuccess] = useState<{ name: string; role: string; downgraded?: boolean; intendedRole?: string } | null>(null);
 
   const router = useRouter();
 
@@ -41,13 +41,18 @@ export function JoinCollection() {
         return;
       }
 
-      setSuccess({ name: data.collection.name, role: data.role });
+      setSuccess({
+        name: data.collection.name,
+        role: data.role,
+        downgraded: data.downgraded,
+        intendedRole: data.intendedRole,
+      });
       setCode('');
 
       // Refresh the page to show updated collections
       setTimeout(() => {
         router.refresh();
-      }, 1500);
+      }, data.downgraded ? 3000 : 1500);
     } catch {
       setError('Failed to join collection');
     } finally {
@@ -79,8 +84,15 @@ export function JoinCollection() {
         )}
 
         {success && (
-          <div className="text-sm text-secondary">
-            Joined &quot;{success.name}&quot; as {success.role}!
+          <div className="text-sm">
+            <div className="text-secondary">
+              Joined &quot;{success.name}&quot; as {success.role}!
+            </div>
+            {success.downgraded && (
+              <div className="mt-2 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 px-3 py-2 border border-yellow-200 dark:border-yellow-800">
+                You were invited as {success.intendedRole} but need Pro for editor access. Upgrade to get full permissions.
+              </div>
+            )}
           </div>
         )}
 

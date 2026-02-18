@@ -170,6 +170,13 @@ export async function GET(request: Request) {
           })
           .eq('id', sub.id);
 
+        // Demote editors to viewers with intended_role
+        await supabaseAdmin
+          .from('collection_members')
+          .update({ role: 'viewer', intended_role: 'editor' })
+          .eq('user_id', sub.user_id)
+          .eq('role', 'editor');
+
         // Send notification email
         if (profile?.email) {
           const subject = deletedCount > 0
