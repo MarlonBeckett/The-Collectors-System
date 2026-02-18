@@ -5,6 +5,40 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+async function verifyShareLinkAccess(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, shareLinkId: string) {
+  const { data: shareLink } = await supabase
+    .from('collection_share_links')
+    .select('id, collection_id')
+    .eq('id', shareLinkId)
+    .single();
+
+  if (!shareLink) return { error: 'Share link not found', status: 404 };
+
+  const { data: collection } = await supabase
+    .from('collections')
+    .select('owner_id')
+    .eq('id', shareLink.collection_id)
+    .single();
+
+  if (!collection) return { error: 'Not authorized', status: 403 };
+
+  if (collection.owner_id === userId) return { shareLink };
+
+  // Check if user is an editor
+  const { data: membership } = await supabase
+    .from('collection_members')
+    .select('role')
+    .eq('collection_id', shareLink.collection_id)
+    .eq('user_id', userId)
+    .single();
+
+  if (!membership || membership.role !== 'editor') {
+    return { error: 'Not authorized', status: 403 };
+  }
+
+  return { shareLink };
+}
+
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const { id } = await params;
@@ -18,25 +52,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const body = await request.json();
     const { is_active, name } = body;
 
-    // Fetch the share link and verify ownership
-    const { data: shareLink } = await supabase
-      .from('collection_share_links')
-      .select('id, collection_id')
-      .eq('id', id)
-      .single();
-
-    if (!shareLink) {
-      return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
-    }
-
-    const { data: collection } = await supabase
-      .from('collections')
-      .select('owner_id')
-      .eq('id', shareLink.collection_id)
-      .single();
-
-    if (!collection || collection.owner_id !== user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+    const access = await verifyShareLinkAccess(supabase, user.id, id);
+    if ('error' in access) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
     const updates: Record<string, unknown> = {};
@@ -69,25 +87,9 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Fetch the share link and verify ownership
-    const { data: shareLink } = await supabase
-      .from('collection_share_links')
-      .select('id, collection_id')
-      .eq('id', id)
-      .single();
-
-    if (!shareLink) {
-      return NextResponse.json({ error: 'Share link not found' }, { status: 404 });
-    }
-
-    const { data: collection } = await supabase
-      .from('collections')
-      .select('owner_id')
-      .eq('id', shareLink.collection_id)
-      .single();
-
-    if (!collection || collection.owner_id !== user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+    const access = await verifyShareLinkAccess(supabase, user.id, id);
+    if ('error' in access) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
     const { error: deleteError } = await supabase

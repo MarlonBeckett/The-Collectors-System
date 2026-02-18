@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify user is the owner of this collection
+    // Verify user is the owner or editor of this collection
     const { data: collection, error: collectionError } = await supabase
       .from('collections')
       .select('id, owner_id')
@@ -54,11 +54,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (collection.owner_id !== user.id) {
-      return NextResponse.json(
-        { error: 'Only the collection owner can create invites' },
-        { status: 403 }
-      );
+    const isOwner = collection.owner_id === user.id;
+
+    if (!isOwner) {
+      // Check if user is an editor
+      const { data: membership } = await supabase
+        .from('collection_members')
+        .select('role')
+        .eq('collection_id', collectionId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'editor') {
+        return NextResponse.json(
+          { error: 'Only owners and editors can create invites' },
+          { status: 403 }
+        );
+      }
+
+      // Editors can only invite viewers
+      if (role !== 'viewer') {
+        return NextResponse.json(
+          { error: 'Editors can only invite viewers' },
+          { status: 403 }
+        );
+      }
     }
 
     // Generate unique invite code

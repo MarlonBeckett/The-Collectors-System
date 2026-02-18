@@ -10,13 +10,15 @@ import {
 
 interface InviteModalProps {
   collectionId: string;
+  userRole: string;
   onClose: () => void;
 }
 
 type InviteRole = 'editor' | 'viewer' | 'quick_view';
 
-export function InviteModal({ collectionId, onClose }: InviteModalProps) {
-  const [role, setRole] = useState<InviteRole>('editor');
+export function InviteModal({ collectionId, userRole, onClose }: InviteModalProps) {
+  const isOwner = userRole === 'owner';
+  const [role, setRole] = useState<InviteRole>(isOwner ? 'editor' : 'quick_view');
   const [linkName, setLinkName] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -117,25 +119,27 @@ export function InviteModal({ collectionId, onClose }: InviteModalProps) {
               {/* Role Selection */}
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">
-                  Select Role
+                  {isOwner ? 'Select Role' : 'Share Type'}
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setRole('editor')}
-                    className={`p-3 border text-left transition-colors ${
-                      role === 'editor'
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                  >
-                    <div className="font-medium">Editor</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Can add, edit, and delete vehicles
-                    </div>
-                    <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                      Requires Pro subscription
-                    </div>
-                  </button>
+                <div className={`grid gap-2 ${isOwner ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  {isOwner && (
+                    <button
+                      onClick={() => setRole('editor')}
+                      className={`p-3 border text-left transition-colors ${
+                        role === 'editor'
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                    >
+                      <div className="font-medium">Editor</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Can add, edit, and delete vehicles
+                      </div>
+                      <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                        Requires Pro subscription
+                      </div>
+                    </button>
+                  )}
                   <button
                     onClick={() => setRole('viewer')}
                     className={`p-3 border text-left transition-colors ${

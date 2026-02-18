@@ -25,6 +25,7 @@ interface MembersModalProps {
   collectionId: string;
   collectionName: string;
   isOwner: boolean;
+  userRole: string;
   onClose: () => void;
   onMemberRemoved: () => void;
 }
@@ -33,9 +34,11 @@ export function MembersModal({
   collectionId,
   collectionName,
   isOwner,
+  userRole,
   onClose,
   onMemberRemoved,
 }: MembersModalProps) {
+  const canManageLinks = isOwner || userRole === 'editor';
   const [members, setMembers] = useState<Member[]>([]);
   const [shareLinks, setShareLinks] = useState<CollectionShareLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,8 +100,8 @@ export function MembersModal({
         });
       setMembers(formatted);
 
-      // Fetch share links (owner only)
-      if (isOwner) {
+      // Fetch share links (owner and editors)
+      if (canManageLinks) {
         const { data: linksData } = await supabase
           .from('collection_share_links')
           .select('*')
@@ -112,7 +115,7 @@ export function MembersModal({
     }
 
     fetchData();
-  }, [collectionId, supabase, isOwner]);
+  }, [collectionId, supabase, canManageLinks]);
 
   const removeMember = async (memberId: string) => {
     if (!isOwner) return;
@@ -283,8 +286,8 @@ export function MembersModal({
             </div>
           )}
 
-          {/* Share Links Section (owner only) */}
-          {isOwner && !loading && shareLinks.length > 0 && (
+          {/* Share Links Section (owner and editors) */}
+          {canManageLinks && !loading && shareLinks.length > 0 && (
             <div className="mt-6 pt-4 border-t border-border">
               <h3 className="text-sm font-medium text-muted-foreground mb-3">Share Links</h3>
               <div className="space-y-3">

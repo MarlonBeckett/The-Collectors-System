@@ -619,6 +619,7 @@ export function SettingsContent({
                 }}
                 memberCount={collection.member_count}
                 isOwner={true}
+                userRole={collection.role}
                 onUpdate={handleUpdate}
               />
             ))}
@@ -642,6 +643,7 @@ export function SettingsContent({
                 }}
                 memberCount={collection.member_count}
                 isOwner={false}
+                userRole={collection.role}
                 onUpdate={handleUpdate}
               />
             ))}

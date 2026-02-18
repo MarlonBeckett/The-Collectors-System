@@ -16,6 +16,7 @@ interface CollectionSettingsProps {
   collection: Collection;
   memberCount: number;
   isOwner: boolean;
+  userRole: string;
   onUpdate: () => void;
 }
 
@@ -23,6 +24,7 @@ export function CollectionSettings({
   collection,
   memberCount,
   isOwner,
+  userRole,
   onUpdate,
 }: CollectionSettingsProps) {
   const [leaving, setLeaving] = useState(false);
@@ -184,7 +186,7 @@ export function CollectionSettings({
               <span className="text-xs text-muted-foreground">Owner</span>
             )}
           </div>
-          {isOwner && (
+          {(isOwner || userRole === 'editor') && (
             <button
               onClick={() => setShowMembersModal(true)}
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -195,15 +197,15 @@ export function CollectionSettings({
           )}
         </div>
 
-        {/* Invite Member Button - Only visible to owners */}
-        {isOwner && (
+        {/* Invite Member Button - Visible to owners and editors */}
+        {(isOwner || userRole === 'editor') && (
           <div className="px-4 pb-4 border-t border-border pt-4">
             <button
               onClick={() => setShowInviteModal(true)}
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 border border-border hover:bg-muted transition-colors"
             >
               <UserPlusIcon className="w-5 h-5" />
-              <span>Invite Member</span>
+              <span>{isOwner ? 'Invite Member' : 'Share Collection'}</span>
             </button>
           </div>
         )}
@@ -237,6 +239,7 @@ export function CollectionSettings({
           collectionId={collection.id}
           collectionName={collection.name}
           isOwner={isOwner}
+          userRole={userRole}
           onClose={() => setShowMembersModal(false)}
           onMemberRemoved={handleMemberRemoved}
         />
@@ -246,6 +249,7 @@ export function CollectionSettings({
       {showInviteModal && (
         <InviteModal
           collectionId={collection.id}
+          userRole={userRole}
           onClose={() => setShowInviteModal(false)}
         />
       )}
