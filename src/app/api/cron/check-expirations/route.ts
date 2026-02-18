@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 
-interface ExpiringBike {
+interface ExpiringVehicle {
   id: string;
   make: string;
   model: string;
@@ -11,9 +11,10 @@ interface ExpiringBike {
   plate_number: string | null;
   tab_expiration: string;
   vehicle_type: string | null;
+  collection_id: string;
 }
 
-async function sendEmail(to: string[], subject: string, html: string) {
+async function sendEmail(to: string, subject: string, html: string) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -34,6 +35,28 @@ async function sendEmail(to: string[], subject: string, html: string) {
   }
 
   return response.json();
+}
+
+function getEmailContent(urgency: string, vehicles: ExpiringVehicle[]): string {
+  const vehicleList = vehicles
+    .map(
+      (v) =>
+        `<li><strong>${getVehicleDisplayName(v)}</strong>${v.plate_number ? ` (Plate: ${v.plate_number})` : ''}</li>`
+    )
+    .join('');
+
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #333;">The Collectors System</h2>
+      <p>The following vehicle tabs ${urgency}:</p>
+      <ul style="line-height: 1.8;">
+        ${vehicleList}
+      </ul>
+      <p style="margin-top: 24px; color: #666; font-size: 14px;">
+        — The Collectors System
+      </p>
+    </div>
+  `;
 }
 
 export async function GET(request: Request) {
@@ -65,65 +88,83 @@ export async function GET(request: Request) {
       '30_day': formatDate(new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)),
     };
 
-    // Get profiles with notifications enabled
-    const { data: profiles } = await supabaseAdmin
-      .from('profiles')
-      .select('email')
-      .eq('receive_notifications', true)
-      .not('email', 'is', null);
+    const results = [];
 
-    const recipientEmails = profiles?.map((p) => p.email).filter(Boolean) as string[];
-
-    if (recipientEmails.length === 0) {
-      return NextResponse.json({ message: 'No recipients configured' });
-    }
-
-    const notifications: { type: string; bikes: ExpiringBike[] }[] = [];
-
-    // Check each notification type
     for (const [notificationType, targetDate] of Object.entries(targetDates)) {
-      // Get bikes expiring on this date
-      const { data: expiringBikes } = await supabaseAdmin
+      // Get expiring vehicles with their collection_id
+      const { data: expiringVehicles } = await supabaseAdmin
         .from('motorcycles')
-        .select('id, make, model, sub_model, year, plate_number, tab_expiration, vehicle_type')
+        .select('id, make, model, sub_model, year, plate_number, tab_expiration, vehicle_type, collection_id')
         .eq('tab_expiration', targetDate)
         .eq('status', 'active');
 
-      if (!expiringBikes || expiringBikes.length === 0) continue;
+      if (!expiringVehicles || expiringVehicles.length === 0) continue;
 
-      // Check which bikes haven't been notified yet today
-      const bikesToNotify: ExpiringBike[] = [];
+      // Filter out already-notified vehicles
+      const vehiclesToNotify: ExpiringVehicle[] = [];
 
-      for (const bike of expiringBikes) {
+      for (const vehicle of expiringVehicles) {
         const { data: existingNotification } = await supabaseAdmin
           .from('notification_log')
           .select('id')
-          .eq('motorcycle_id', bike.id)
+          .eq('motorcycle_id', vehicle.id)
           .eq('notification_type', notificationType)
           .eq('sent_date', formatDate(today))
           .single();
 
         if (!existingNotification) {
-          bikesToNotify.push(bike);
+          vehiclesToNotify.push(vehicle);
         }
       }
 
-      if (bikesToNotify.length > 0) {
-        notifications.push({ type: notificationType, bikes: bikesToNotify });
+      if (vehiclesToNotify.length === 0) continue;
+
+      // Group vehicles by collection_id
+      const vehiclesByCollection = new Map<string, ExpiringVehicle[]>();
+      for (const vehicle of vehiclesToNotify) {
+        const collectionVehicles = vehiclesByCollection.get(vehicle.collection_id) || [];
+        collectionVehicles.push(vehicle);
+        vehiclesByCollection.set(vehicle.collection_id, collectionVehicles);
       }
-    }
 
-    // Send notifications
-    const results = [];
+      // Build per-user vehicle lists by looking up collection members
+      const userVehicleMap = new Map<string, ExpiringVehicle[]>();
 
-    for (const notification of notifications) {
-      const { type, bikes } = notification;
+      for (const [collectionId, vehicles] of vehiclesByCollection) {
+        // Get members of this collection
+        const { data: members } = await supabaseAdmin
+          .from('collection_members')
+          .select('user_id')
+          .eq('collection_id', collectionId);
 
-      // Build email content
+        if (!members || members.length === 0) continue;
+
+        const userIds = members.map((m) => m.user_id);
+
+        // Get profiles for these members who have notifications enabled
+        const { data: profiles } = await supabaseAdmin
+          .from('profiles')
+          .select('id, email')
+          .in('id', userIds)
+          .eq('receive_notifications', true)
+          .not('email', 'is', null);
+
+        if (!profiles) continue;
+
+        for (const profile of profiles) {
+          if (!profile.email) continue;
+
+          const existing = userVehicleMap.get(profile.email) || [];
+          existing.push(...vehicles);
+          userVehicleMap.set(profile.email, existing);
+        }
+      }
+
+      // Determine email subject/urgency
       let subject = '';
       let urgency = '';
 
-      switch (type) {
+      switch (notificationType) {
         case '0_day':
           subject = '🚨 Vehicle tabs expire TODAY!';
           urgency = 'expire TODAY';
@@ -138,52 +179,38 @@ export async function GET(request: Request) {
           break;
       }
 
-      const bikeList = bikes
-        .map(
-          (b) =>
-            `<li><strong>${getVehicleDisplayName(b)}</strong>${b.plate_number ? ` (Plate: ${b.plate_number})` : ''}</li>`
-        )
-        .join('');
+      // Send personalized email to each user
+      let sentCount = 0;
+      let failCount = 0;
 
-      const html = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">The Collectors System</h2>
-          <p>The following vehicle tabs ${urgency}:</p>
-          <ul style="line-height: 1.8;">
-            ${bikeList}
-          </ul>
-          <p style="margin-top: 24px; color: #666; font-size: 14px;">
-            — The Collectors System
-          </p>
-        </div>
-      `;
+      for (const [email, vehicles] of userVehicleMap) {
+        const html = getEmailContent(urgency, vehicles);
 
-      try {
-        await sendEmail(recipientEmails, subject, html);
+        try {
+          await sendEmail(email, subject, html);
+          sentCount++;
 
-        // Log notifications
-        for (const bike of bikes) {
-          await supabaseAdmin.from('notification_log').insert({
-            motorcycle_id: bike.id,
-            notification_type: type,
-            recipient_emails: recipientEmails,
-          });
+          // Log notification for each vehicle sent to this user
+          for (const vehicle of vehicles) {
+            await supabaseAdmin.from('notification_log').insert({
+              motorcycle_id: vehicle.id,
+              notification_type: notificationType,
+              recipient_emails: [email],
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to send ${notificationType} email to ${email}:`, error);
+          failCount++;
         }
-
-        results.push({
-          type,
-          bikeCount: bikes.length,
-          recipients: recipientEmails.length,
-          status: 'sent',
-        });
-      } catch (error) {
-        results.push({
-          type,
-          bikeCount: bikes.length,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
       }
+
+      results.push({
+        type: notificationType,
+        vehicleCount: vehiclesToNotify.length,
+        emailsSent: sentCount,
+        emailsFailed: failCount,
+        status: failCount === 0 ? 'sent' : sentCount > 0 ? 'partial' : 'failed',
+      });
     }
 
     return NextResponse.json({
