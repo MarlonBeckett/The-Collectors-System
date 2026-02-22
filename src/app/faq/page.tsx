@@ -3,7 +3,7 @@ import { PublicPageLayout } from '@/components/layout/PublicPageLayout';
 
 export const metadata: Metadata = {
   title: 'FAQ',
-  description: 'Frequently asked questions about The Collectors System — vehicle types, pricing, sharing, data, and more.',
+  description: 'Common questions about The Collectors System. Learn about features, pricing, vehicle types supported, data privacy, and more.',
   alternates: {
     canonical: '/faq',
   },

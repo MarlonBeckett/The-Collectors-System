@@ -1,6 +1,22 @@
 import type { Metadata, Viewport } from 'next';
+import { Oxanium, Source_Code_Pro } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { CookieConsent } from '@/components/layout/CookieConsent';
 import './globals.css';
+
+const oxanium = Oxanium({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-oxanium',
+  display: 'swap',
+});
+
+const sourceCodePro = Source_Code_Pro({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-source-code-pro',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://thecollectorssystem.com'),
@@ -9,7 +25,7 @@ export const metadata: Metadata = {
     template: '%s | The Collectors System',
   },
   description:
-    'Track and manage your vehicle collection — photos, mileage tracking, service history, documents, expiration alerts, and more. Cars, motorcycles, boats, trailers.',
+    'Track and manage your vehicle collection — cars, motorcycles, boats, and more. Photos, service history, documents, expiration alerts. Free to start.',
   keywords: [
     'vehicle collection manager',
     'garage management',
@@ -51,8 +67,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#d4d4d4' },
     { media: '(prefers-color-scheme: dark)', color: '#1a1a1a' },
@@ -65,12 +79,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${oxanium.variable} ${sourceCodePro.variable}`} suppressHydrationWarning>
       <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -93,6 +103,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased min-h-screen">
         {children}
+        <CookieConsent />
         <Analytics />
       </body>
     </html>

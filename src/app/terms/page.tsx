@@ -3,7 +3,7 @@ import { PublicPageLayout } from '@/components/layout/PublicPageLayout';
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Terms of service for The Collectors System — usage terms, billing, and user responsibilities.',
+  description: 'Terms of service for The Collectors System vehicle collection manager.',
   alternates: {
     canonical: '/terms',
   },

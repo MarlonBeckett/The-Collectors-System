@@ -28,13 +28,13 @@ export async function PublicPageLayout({ children }: PublicPageLayoutProps) {
                 <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">Home</Link>
                 <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground">About</Link>
                 <Link href="/faq" className="text-sm text-muted-foreground hover:text-foreground">FAQ</Link>
+                <Link href="/blog" className="text-sm text-muted-foreground hover:text-foreground">Blog</Link>
               </div>
             </div>
             <div>
               <h4 className="font-semibold text-foreground mb-3 text-sm">Support</h4>
               <div className="flex flex-col gap-2">
                 <Link href="/support" className="text-sm text-muted-foreground hover:text-foreground">Contact</Link>
-                <Link href="/faq" className="text-sm text-muted-foreground hover:text-foreground">FAQ</Link>
               </div>
             </div>
             <div>

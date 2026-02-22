@@ -3,7 +3,7 @@ import { PublicPageLayout } from '@/components/layout/PublicPageLayout';
 
 export const metadata: Metadata = {
   title: 'About',
-  description: 'Learn about The Collectors System — the vehicle collection management app for enthusiasts.',
+  description: 'Learn why we built The Collectors System — a simple, affordable way to organize your car, motorcycle, and boat collection.',
   alternates: {
     canonical: '/about',
   },

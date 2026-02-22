@@ -21,8 +21,8 @@
   --border: #505050;
   --input: #505050;
   --ring: #b71c1c;
-  --font-sans: "Oxanium", sans-serif;
-  --font-mono: "Source Code Pro", monospace;
+  --font-sans: var(--font-oxanium, "Oxanium"), sans-serif;
+  --font-mono: var(--font-source-code-pro, "Source Code Pro"), monospace;
   --radius: 0px;
   --skeleton-base: #a3a3a3;
   --skeleton-highlight: #bfbfbf;

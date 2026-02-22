@@ -53,7 +53,18 @@ export async function updateSession(request: NextRequest) {
                         request.nextUrl.pathname.startsWith('/login') ||
                         request.nextUrl.pathname.startsWith('/signup') ||
                         request.nextUrl.pathname.startsWith('/auth/confirm') ||
-                        request.nextUrl.pathname.startsWith('/share');
+                        request.nextUrl.pathname.startsWith('/share') ||
+                        request.nextUrl.pathname.startsWith('/about') ||
+                        request.nextUrl.pathname.startsWith('/faq') ||
+                        request.nextUrl.pathname.startsWith('/privacy') ||
+                        request.nextUrl.pathname.startsWith('/terms') ||
+                        request.nextUrl.pathname.startsWith('/support') ||
+                        request.nextUrl.pathname.startsWith('/cars') ||
+                        request.nextUrl.pathname.startsWith('/motorcycles') ||
+                        request.nextUrl.pathname.startsWith('/boats') ||
+                        request.nextUrl.pathname.startsWith('/trailers') ||
+                        request.nextUrl.pathname.startsWith('/compare') ||
+                        request.nextUrl.pathname.startsWith('/blog');
 
   // Auth routes (login/signup pages)
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') ||

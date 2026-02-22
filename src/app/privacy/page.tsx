@@ -3,7 +3,7 @@ import { PublicPageLayout } from '@/components/layout/PublicPageLayout';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Privacy policy for The Collectors System — how we collect, use, and protect your data.',
+  description: 'How The Collectors System handles your data, photos, and documents. Read our full privacy policy.',
   alternates: {
     canonical: '/privacy',
   },
