@@ -7,6 +7,8 @@ import {
   CheckIcon,
   LinkIcon,
 } from '@heroicons/react/24/outline';
+import { ShareLinkToggles } from '@/types/database';
+import { VisibilityToggles, DEFAULT_TOGGLES } from '@/components/share/VisibilityToggles';
 
 interface InviteModalProps {
   collectionId: string;
@@ -26,6 +28,7 @@ export function InviteModal({ collectionId, userRole, onClose }: InviteModalProp
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toggles, setToggles] = useState<ShareLinkToggles>({ ...DEFAULT_TOGGLES });
 
   const generateInvite = async () => {
     setGenerating(true);
@@ -37,7 +40,7 @@ export function InviteModal({ collectionId, userRole, onClose }: InviteModalProp
         const response = await fetch('/api/collections/share-link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ collectionId, ...(linkName.trim() ? { name: linkName.trim() } : {}) }),
+          body: JSON.stringify({ collectionId, ...toggles, ...(linkName.trim() ? { name: linkName.trim() } : {}) }),
         });
 
         const data = await response.json();
@@ -94,6 +97,7 @@ export function InviteModal({ collectionId, userRole, onClose }: InviteModalProp
     setExpiresAt(null);
     setCopied(false);
     setLinkName('');
+    setToggles({ ...DEFAULT_TOGGLES });
   };
 
   const hasResult = inviteCode || shareUrl;
@@ -173,19 +177,25 @@ export function InviteModal({ collectionId, userRole, onClose }: InviteModalProp
               </div>
 
               {role === 'quick_view' && (
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">
-                    Link Name <span className="text-xs">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={linkName}
-                    onChange={(e) => setLinkName(e.target.value)}
-                    placeholder="e.g. For Instagram, For Dad"
-                    className="w-full px-3 py-2 border border-border bg-background text-sm focus:outline-none focus:border-primary"
-                    maxLength={100}
+                <>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">
+                      Link Name <span className="text-xs">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={linkName}
+                      onChange={(e) => setLinkName(e.target.value)}
+                      placeholder="e.g. For Instagram, For Dad"
+                      className="w-full px-3 py-2 border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      maxLength={100}
+                    />
+                  </div>
+                  <VisibilityToggles
+                    values={toggles}
+                    onChange={(key, value) => setToggles(prev => ({ ...prev, [key]: value }))}
                   />
-                </div>
+                </>
               )}
 
               {error && (
@@ -238,7 +248,7 @@ export function InviteModal({ collectionId, userRole, onClose }: InviteModalProp
                   This link doesn&apos;t expire. You can disable it anytime from the Members panel.
                 </p>
                 <p className="text-xs">
-                  Sensitive info (VIN, plate, price) is hidden from anonymous viewers.
+                  Field visibility is configured per link. Edit it from the Members panel.
                 </p>
               </div>
 

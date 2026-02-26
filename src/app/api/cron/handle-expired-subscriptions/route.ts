@@ -149,7 +149,6 @@ export async function GET(request: Request) {
               // Delete related records
               await supabaseAdmin.from('photos').delete().eq('motorcycle_id', vehicle.id);
               await supabaseAdmin.from('mileage_history').delete().eq('motorcycle_id', vehicle.id);
-              await supabaseAdmin.from('value_history').delete().eq('motorcycle_id', vehicle.id);
               await supabaseAdmin.from('service_logs').delete().eq('motorcycle_id', vehicle.id);
               await supabaseAdmin.from('vehicle_documents').delete().eq('motorcycle_id', vehicle.id);
 

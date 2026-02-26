@@ -7,7 +7,6 @@ import {
   ServiceRecord,
   ServiceRecordReceipt,
   MileageHistory,
-  ValueHistory,
 } from '@/types/database';
 import { getVehicleDisplayName } from '@/lib/vehicleUtils';
 import { generateComprehensiveCSV, ExportOptions } from '@/lib/exportUtils';
@@ -33,7 +32,6 @@ export interface VehicleExportData {
   documents: VehicleDocument[];
   serviceRecords: (ServiceRecord & { receipts: ServiceRecordReceipt[] })[];
   mileageHistory: MileageHistory[];
-  valueHistory: ValueHistory[];
   /** Map of receipt file names used in ZIP, keyed by service record id */
   receiptFileNamesByServiceId: Map<string, string[]>;
   /** Map of document file names used in ZIP, keyed by document id */
@@ -112,8 +110,7 @@ function buildVehicleInfoJson(
   photos: Photo[],
   documents: VehicleDocument[],
   serviceRecords: (ServiceRecord & { receipts: ServiceRecordReceipt[] })[],
-  mileageHistory: MileageHistory[],
-  valueHistory: ValueHistory[]
+  mileageHistory: MileageHistory[]
 ): string {
   return JSON.stringify(
     {
@@ -135,7 +132,6 @@ function buildVehicleInfoJson(
         tab_expiration: vehicle.tab_expiration,
         purchase_price: vehicle.purchase_price,
         purchase_date: vehicle.purchase_date,
-        estimated_value: vehicle.estimated_value,
         sale_info: vehicle.sale_info,
         created_at: vehicle.created_at,
         updated_at: vehicle.updated_at,
@@ -184,14 +180,6 @@ function buildVehicleInfoJson(
         notes: m.notes,
         created_at: m.created_at,
       })),
-      value_history: valueHistory.map((v) => ({
-        id: v.id,
-        estimated_value: v.estimated_value,
-        recorded_date: v.recorded_date,
-        source: v.source,
-        notes: v.notes,
-        created_at: v.created_at,
-      })),
     },
     null,
     2
@@ -214,7 +202,7 @@ async function addVehicleToZip(
 ): Promise<VehicleExportData | null> {
   const vDisplayName = getVehicleDisplayName(vehicle);
   // Fetch all related data for this vehicle
-  const [photosRes, documentsRes, serviceRecordsRes, _receiptsRes, mileageRes, valueRes] =
+  const [photosRes, documentsRes, serviceRecordsRes, _receiptsRes, mileageRes] =
     await Promise.all([
       supabase
         .from('photos')
@@ -241,18 +229,12 @@ async function addVehicleToZip(
         .select('*')
         .eq('motorcycle_id', vehicle.id)
         .order('recorded_date', { ascending: false }),
-      supabase
-        .from('value_history')
-        .select('*')
-        .eq('motorcycle_id', vehicle.id)
-        .order('recorded_date', { ascending: false }),
     ]);
 
   const photos = (photosRes.data || []) as Photo[];
   const documents = (documentsRes.data || []) as VehicleDocument[];
   const serviceRecords = (serviceRecordsRes.data || []) as ServiceRecord[];
   const mileageHistory = (mileageRes.data || []) as MileageHistory[];
-  const valueHistory = (valueRes.data || []) as ValueHistory[];
 
   // Fetch receipts for each service record
   const serviceRecordIds = serviceRecords.map((sr) => sr.id);
@@ -281,8 +263,7 @@ async function addVehicleToZip(
     photos,
     documents,
     serviceRecordsWithReceipts,
-    mileageHistory,
-    valueHistory
+    mileageHistory
   );
   zip.file(`${rootFolder}/vehicle-data/${vehicleFolderName}.json`, infoJson);
 
@@ -379,7 +360,6 @@ async function addVehicleToZip(
     documents,
     serviceRecords: serviceRecordsWithReceipts,
     mileageHistory,
-    valueHistory,
     receiptFileNamesByServiceId,
     docFileNameById,
   };

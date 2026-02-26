@@ -6,16 +6,16 @@ import { VehicleDetailContent } from '@/components/vehicles/VehicleDetailContent
 import type { Metadata } from 'next';
 
 interface ShareVehiclePageProps {
-  params: Promise<{ token: string; id: string }>;
+  params: Promise<{ token: string }>;
 }
 
 export async function generateMetadata({ params }: ShareVehiclePageProps): Promise<Metadata> {
-  const { token, id } = await params;
+  const { token } = await params;
   const supabase = createAdminClient();
 
   const { data: shareLink } = await supabase
-    .from('collection_share_links')
-    .select('collection_id, is_active')
+    .from('vehicle_share_links')
+    .select('motorcycle_id, is_active')
     .eq('token', token)
     .single();
 
@@ -26,8 +26,7 @@ export async function generateMetadata({ params }: ShareVehiclePageProps): Promi
   const { data: vehicle } = await supabase
     .from('motorcycles')
     .select('year, make, model')
-    .eq('id', id)
-    .eq('collection_id', shareLink.collection_id)
+    .eq('id', shareLink.motorcycle_id)
     .single();
 
   if (!vehicle) {
@@ -42,13 +41,13 @@ export async function generateMetadata({ params }: ShareVehiclePageProps): Promi
 }
 
 export default async function ShareVehiclePage({ params }: ShareVehiclePageProps) {
-  const { token, id } = await params;
+  const { token } = await params;
   const supabase = createAdminClient();
 
-  // Look up share link
+  // Look up vehicle share link
   const { data: shareLink } = await supabase
-    .from('collection_share_links')
-    .select('id, collection_id, is_active, include_vin, include_plate, include_purchase_info, include_tab_expiration, include_notes, include_service_records, include_documents, include_mileage')
+    .from('vehicle_share_links')
+    .select('id, motorcycle_id, is_active, include_vin, include_plate, include_purchase_info, include_tab_expiration, include_notes, include_service_records, include_documents, include_mileage')
     .eq('token', token)
     .single();
 
@@ -56,12 +55,13 @@ export default async function ShareVehiclePage({ params }: ShareVehiclePageProps
     return notFound();
   }
 
-  // Fetch vehicle and verify it belongs to this collection
+  const vehicleId = shareLink.motorcycle_id;
+
+  // Fetch vehicle
   const { data: vehicleData } = await supabase
     .from('motorcycles')
     .select('*')
-    .eq('id', id)
-    .eq('collection_id', shareLink.collection_id)
+    .eq('id', vehicleId)
     .single();
 
   if (!vehicleData) {
@@ -79,13 +79,6 @@ export default async function ShareVehiclePage({ params }: ShareVehiclePageProps
     notes: shareLink.include_notes ? vehicleData.notes : null,
   };
 
-  // Fetch collection name
-  const { data: collection } = await supabase
-    .from('collections')
-    .select('name')
-    .eq('id', shareLink.collection_id)
-    .single();
-
   // Fetch related data in parallel (skip sections toggled off)
   const [
     { data: photosData },
@@ -93,15 +86,15 @@ export default async function ShareVehiclePage({ params }: ShareVehiclePageProps
     { data: serviceData },
     { data: documentsData },
   ] = await Promise.all([
-    supabase.from('photos').select('*').eq('motorcycle_id', id).order('display_order', { ascending: true }),
+    supabase.from('photos').select('*').eq('motorcycle_id', vehicleId).order('display_order', { ascending: true }),
     shareLink.include_mileage
-      ? supabase.from('mileage_history').select('*').eq('motorcycle_id', id).order('recorded_date', { ascending: false })
+      ? supabase.from('mileage_history').select('*').eq('motorcycle_id', vehicleId).order('recorded_date', { ascending: false })
       : Promise.resolve({ data: [] }),
     shareLink.include_service_records
-      ? supabase.from('service_records').select('*').eq('motorcycle_id', id).order('service_date', { ascending: false })
+      ? supabase.from('service_records').select('*').eq('motorcycle_id', vehicleId).order('service_date', { ascending: false })
       : Promise.resolve({ data: [] }),
     shareLink.include_documents
-      ? supabase.from('vehicle_documents').select('*').eq('motorcycle_id', id).order('created_at', { ascending: false })
+      ? supabase.from('vehicle_documents').select('*').eq('motorcycle_id', vehicleId).order('created_at', { ascending: false })
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -158,12 +151,14 @@ export default async function ShareVehiclePage({ params }: ShareVehiclePageProps
 
   // Update last_accessed_at
   await supabase
-    .from('collection_share_links')
+    .from('vehicle_share_links')
     .update({ last_accessed_at: new Date().toISOString() })
     .eq('id', shareLink.id);
 
+  const vehicleName = [vehicleData.year, vehicleData.make, vehicleData.model].filter(Boolean).join(' ') || 'Shared Vehicle';
+
   return (
-    <ShareShell collectionName={collection?.name || 'Shared Collection'}>
+    <ShareShell collectionName={vehicleName}>
       <VehicleDetailContent
         vehicle={vehicle}
         photos={photos}
@@ -174,7 +169,6 @@ export default async function ShareVehiclePage({ params }: ShareVehiclePageProps
         documentUrls={documentUrls}
         receiptUrls={receiptUrls}
         canEdit={false}
-        backHref={`/share/${token}`}
       />
     </ShareShell>
   );

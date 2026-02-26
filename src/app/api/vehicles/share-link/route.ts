@@ -12,12 +12,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { collectionId, name } = body;
-    if (!collectionId) {
-      return NextResponse.json({ error: 'Collection ID is required' }, { status: 400 });
+    const { motorcycleId, name, includeVin } = body;
+    if (!motorcycleId) {
+      return NextResponse.json({ error: 'Vehicle ID is required' }, { status: 400 });
     }
 
-    // Extract toggle fields
+    // Extract toggle fields from request body
     const toggleFields: Record<string, boolean> = {};
     const toggleKeys = [
       'include_vin', 'include_plate', 'include_purchase_info', 'include_tab_expiration',
@@ -26,12 +26,26 @@ export async function POST(request: NextRequest) {
     for (const key of toggleKeys) {
       if (typeof body[key] === 'boolean') toggleFields[key] = body[key];
     }
+    // Support legacy includeVin param
+    if (typeof includeVin === 'boolean' && !('include_vin' in toggleFields)) {
+      toggleFields.include_vin = includeVin;
+    }
 
-    // Verify user is the collection owner or editor
+    // Verify vehicle exists and user has owner/editor access via its collection
+    const { data: vehicle } = await supabase
+      .from('motorcycles')
+      .select('id, collection_id')
+      .eq('id', motorcycleId)
+      .single();
+
+    if (!vehicle || !vehicle.collection_id) {
+      return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
+    }
+
     const { data: collection } = await supabase
       .from('collections')
       .select('id, owner_id')
-      .eq('id', collectionId)
+      .eq('id', vehicle.collection_id)
       .single();
 
     if (!collection) {
@@ -39,11 +53,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (collection.owner_id !== user.id) {
-      // Check if user is an editor
       const { data: membership } = await supabase
         .from('collection_members')
         .select('role')
-        .eq('collection_id', collectionId)
+        .eq('collection_id', vehicle.collection_id)
         .eq('user_id', user.id)
         .single();
 
@@ -55,9 +68,9 @@ export async function POST(request: NextRequest) {
     const token = crypto.randomUUID();
 
     const { data: shareLink, error: insertError } = await supabase
-      .from('collection_share_links')
+      .from('vehicle_share_links')
       .insert({
-        collection_id: collectionId,
+        motorcycle_id: motorcycleId,
         token,
         created_by: user.id,
         ...toggleFields,
@@ -67,12 +80,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error('Create share link error:', insertError);
+      console.error('Create vehicle share link error:', insertError);
       return NextResponse.json({ error: 'Failed to create share link' }, { status: 500 });
     }
 
     const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-    const shareUrl = `${origin}/share/${token}`;
+    const shareUrl = `${origin}/share/vehicle/${token}`;
 
     return NextResponse.json({
       id: shareLink.id,
@@ -80,7 +93,7 @@ export async function POST(request: NextRequest) {
       shareUrl,
     });
   } catch (error) {
-    console.error('Create share link error:', error);
+    console.error('Create vehicle share link error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

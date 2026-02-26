@@ -43,7 +43,6 @@ export interface Motorcycle {
   sale_info: SaleInfo | null;
   purchase_price: number | null;
   purchase_date: string | null;
-  estimated_value: number | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -126,17 +125,6 @@ export interface MileageHistory {
   created_by: string | null;
 }
 
-export interface ValueHistory {
-  id: string;
-  motorcycle_id: string;
-  estimated_value: number;
-  recorded_date: string;
-  source: string | null;
-  notes: string | null;
-  created_at: string;
-  created_by: string | null;
-}
-
 export type ServiceCategory = 'maintenance' | 'repair' | 'upgrade' | 'inspection';
 
 export type DocumentType = 'title' | 'registration' | 'insurance' | 'receipt' | 'manual' | 'other';
@@ -183,9 +171,31 @@ export interface ServiceRecordWithReceipts extends ServiceRecord {
   receipts: ServiceRecordReceipt[];
 }
 
-export interface CollectionShareLink {
+export interface ShareLinkToggles {
+  include_vin: boolean;
+  include_plate: boolean;
+  include_purchase_info: boolean;
+  include_tab_expiration: boolean;
+  include_notes: boolean;
+  include_service_records: boolean;
+  include_documents: boolean;
+  include_mileage: boolean;
+}
+
+export interface CollectionShareLink extends ShareLinkToggles {
   id: string;
   collection_id: string;
+  token: string;
+  name: string | null;
+  created_by: string;
+  created_at: string;
+  is_active: boolean;
+  last_accessed_at: string | null;
+}
+
+export interface VehicleShareLink extends ShareLinkToggles {
+  id: string;
+  motorcycle_id: string;
   token: string;
   name: string | null;
   created_by: string;
@@ -302,6 +312,11 @@ export interface Database {
         Row: SupportMessage;
         Insert: Omit<SupportMessage, 'id' | 'created_at' | 'status'> & { id?: string; status?: SupportMessageStatus };
         Update: Partial<Omit<SupportMessage, 'id' | 'created_at'>>;
+      };
+      vehicle_share_links: {
+        Row: VehicleShareLink;
+        Insert: Omit<VehicleShareLink, 'id' | 'created_at' | 'token' | 'is_active' | 'last_accessed_at'> & { id?: string; token?: string; is_active?: boolean };
+        Update: Partial<Omit<VehicleShareLink, 'id' | 'created_at'>>;
       };
     };
     Enums: {

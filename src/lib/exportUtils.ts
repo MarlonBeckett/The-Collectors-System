@@ -205,7 +205,6 @@ export interface ComprehensiveExportRow {
   purchase_date: string;
   nickname: string;
   maintenance_notes: string;
-  estimated_value: string;
   sale_info_type: string;
   sale_info_date: string;
   sale_info_amount: string;
@@ -244,7 +243,6 @@ const COMPREHENSIVE_COLUMNS: (keyof ComprehensiveExportRow)[] = [
   'purchase_date',
   'nickname',
   'maintenance_notes',
-  'estimated_value',
   'sale_info_type',
   'sale_info_date',
   'sale_info_amount',
@@ -272,7 +270,7 @@ function emptyRow(vehicleName: string, recordType: string): ComprehensiveExportR
     make: '', model: '', sub_model: '', year: '', vehicle_type: '', vin: '', plate_number: '',
     mileage: '', tab_expiration: '', status: '', notes: '',
     purchase_price: '', purchase_date: '', nickname: '', maintenance_notes: '',
-    estimated_value: '', sale_info_type: '', sale_info_date: '', sale_info_amount: '', sale_info_notes: '',
+    sale_info_type: '', sale_info_date: '', sale_info_amount: '', sale_info_notes: '',
     service_date: '', service_title: '', service_description: '', service_cost: '',
     service_odometer: '', service_shop: '', service_category: '', service_receipt_files: '',
     document_title: '', document_type: '', document_expiration: '', document_file_name: '', document_file_type: '',
@@ -311,7 +309,6 @@ export function generateComprehensiveCSV(
     vRow.purchase_date = vehicle.purchase_date || '';
     vRow.nickname = vehicle.nickname || '';
     vRow.maintenance_notes = vehicle.maintenance_notes || '';
-    vRow.estimated_value = vehicle.estimated_value?.toString() || '';
     if (vehicle.sale_info) {
       vRow.sale_info_type = vehicle.sale_info.type || '';
       vRow.sale_info_date = vehicle.sale_info.date || '';

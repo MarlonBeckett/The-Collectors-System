@@ -37,7 +37,6 @@ interface VehicleJsonData {
     tab_expiration?: string | null;
     purchase_price?: number | null;
     purchase_date?: string | null;
-    estimated_value?: number | null;
     sale_info?: {
       type?: string;
       date?: string;
@@ -69,12 +68,6 @@ interface VehicleJsonData {
   mileage_history?: {
     mileage: number;
     recorded_date: string;
-    notes?: string | null;
-  }[];
-  value_history?: {
-    estimated_value: number;
-    recorded_date: string;
-    source?: string | null;
     notes?: string | null;
   }[];
 }
@@ -159,7 +152,6 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
         tab_expiration: formatDateForDB(tabExpDate),
         purchase_price: v.purchase_price || null,
         purchase_date: formatDateForDB(purchaseDate),
-        estimated_value: v.estimated_value || null,
         sale_info: v.sale_info || null,
         collection_id: selectedCollectionId,
       }).select('id').single();
@@ -236,23 +228,6 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
         }
       }
 
-      // Import value history
-      if (jsonData.value_history && jsonData.value_history.length > 0) {
-        for (const vh of jsonData.value_history) {
-          const recordedDate = vh.recorded_date
-            ? formatDateForDB(parseFlexibleDate(vh.recorded_date)) || new Date().toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0];
-
-          await supabase.from('value_history').insert({
-            motorcycle_id: vehicleId,
-            estimated_value: vh.estimated_value,
-            recorded_date: recordedDate,
-            source: vh.source || null,
-            notes: vh.notes || null,
-          });
-        }
-      }
-
       setDone(true);
       // Redirect to the new vehicle
       router.push(`/vehicles/${vehicleId}`);
@@ -278,8 +253,6 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
     const serviceCt = jsonData.service_records?.length || 0;
     const docCt = jsonData.documents?.length || 0;
     const mileageCt = jsonData.mileage_history?.length || 0;
-    const valueCt = jsonData.value_history?.length || 0;
-
     return (
       <div className="space-y-4">
         <div className="bg-card border border-border p-4">
@@ -291,7 +264,6 @@ export function VehicleJsonUpload({ collections }: VehicleJsonUploadProps) {
             {serviceCt > 0 && <p>{serviceCt} service record{serviceCt !== 1 ? 's' : ''}</p>}
             {docCt > 0 && <p>{docCt} document{docCt !== 1 ? 's' : ''}</p>}
             {mileageCt > 0 && <p>{mileageCt} mileage entr{mileageCt !== 1 ? 'ies' : 'y'}</p>}
-            {valueCt > 0 && <p>{valueCt} value history entr{valueCt !== 1 ? 'ies' : 'y'}</p>}
           </div>
         </div>
 

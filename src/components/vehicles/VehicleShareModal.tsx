@@ -4,152 +4,88 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   XMarkIcon,
-  UserMinusIcon,
   ClipboardDocumentIcon,
   CheckIcon,
   TrashIcon,
   PencilIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import { CollectionShareLink, ShareLinkToggles } from '@/types/database';
-import { VisibilityToggles, VisibilityBadges, TOGGLE_LABELS } from '@/components/share/VisibilityToggles';
+import { VehicleShareLink, ShareLinkToggles } from '@/types/database';
+import { VisibilityToggles, VisibilityBadges, DEFAULT_TOGGLES, TOGGLE_LABELS } from '@/components/share/VisibilityToggles';
 
-interface Member {
-  user_id: string;
-  role: string;
-  intended_role: string | null;
-  email: string | null;
-  username: string | null;
-  isCurrentUser: boolean;
-}
-
-interface MembersModalProps {
-  collectionId: string;
-  collectionName: string;
-  isOwner: boolean;
-  userRole: string;
+interface VehicleShareModalProps {
+  motorcycleId: string;
+  vehicleName: string;
   onClose: () => void;
-  onMemberRemoved: () => void;
 }
 
-export function MembersModal({
-  collectionId,
-  collectionName,
-  isOwner,
-  userRole,
-  onClose,
-  onMemberRemoved,
-}: MembersModalProps) {
-  const canManageLinks = isOwner || userRole === 'editor';
-  const [members, setMembers] = useState<Member[]>([]);
-  const [shareLinks, setShareLinks] = useState<CollectionShareLink[]>([]);
+export function VehicleShareModal({ motorcycleId, vehicleName, onClose }: VehicleShareModalProps) {
+  const [shareLinks, setShareLinks] = useState<VehicleShareLink[]>([]);
   const [loading, setLoading] = useState(true);
-  const [removingMember, setRemovingMember] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newLinkName, setNewLinkName] = useState('');
+  const [newToggles, setNewToggles] = useState<ShareLinkToggles>({ ...DEFAULT_TOGGLES });
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [togglingLink, setTogglingLink] = useState<string | null>(null);
   const [deletingLink, setDeletingLink] = useState<string | null>(null);
-  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [editingVisibilityId, setEditingVisibilityId] = useState<string | null>(null);
-  const [editingToggles, setEditingToggles] = useState<ShareLinkToggles>({} as ShareLinkToggles);
+  const [editingToggles, setEditingToggles] = useState<ShareLinkToggles>({ ...DEFAULT_TOGGLES });
   const [savingVisibility, setSavingVisibility] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchData() {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentUserId = user?.id;
+    async function fetchLinks() {
+      const { data } = await supabase
+        .from('vehicle_share_links')
+        .select('*')
+        .eq('motorcycle_id', motorcycleId)
+        .order('created_at', { ascending: false });
 
-      // Fetch members
-      const { data: membersData, error: membersError } = await supabase
-        .from('collection_members')
-        .select('user_id, role, intended_role')
-        .eq('collection_id', collectionId);
-
-      if (membersError || !membersData) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch profiles for all member user_ids
-      const userIds = membersData.map((m) => m.user_id);
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, email, username')
-        .in('id', userIds);
-
-      const profileMap = new Map(
-        (profilesData || []).map((p) => [p.id, p])
-      );
-
-      const formatted = membersData
-        .map((m) => {
-          const profile = profileMap.get(m.user_id);
-          return {
-            user_id: m.user_id,
-            role: m.role,
-            intended_role: m.intended_role || null,
-            email: profile?.email || null,
-            username: profile?.username || null,
-            isCurrentUser: m.user_id === currentUserId,
-          };
-        })
-        .sort((a, b) => {
-          if (a.role === 'owner') return -1;
-          if (b.role === 'owner') return 1;
-          if (a.isCurrentUser) return -1;
-          if (b.isCurrentUser) return 1;
-          return 0;
-        });
-      setMembers(formatted);
-
-      // Fetch share links (owner and editors)
-      if (canManageLinks) {
-        const { data: linksData } = await supabase
-          .from('collection_share_links')
-          .select('*')
-          .eq('collection_id', collectionId)
-          .order('created_at', { ascending: false });
-
-        setShareLinks((linksData || []) as CollectionShareLink[]);
-      }
-
+      setShareLinks((data || []) as VehicleShareLink[]);
       setLoading(false);
     }
+    fetchLinks();
+  }, [motorcycleId, supabase]);
 
-    fetchData();
-  }, [collectionId, supabase, canManageLinks]);
-
-  const removeMember = async (memberId: string) => {
-    if (!isOwner) return;
-
-    if (!confirm('Are you sure you want to remove this member?')) {
-      return;
-    }
-
-    setRemovingMember(memberId);
+  const createShareLink = async () => {
+    setCreating(true);
     try {
-      const { error } = await supabase
-        .from('collection_members')
-        .delete()
-        .eq('collection_id', collectionId)
-        .eq('user_id', memberId);
+      const response = await fetch('/api/vehicles/share-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          motorcycleId,
+          name: newLinkName.trim() || undefined,
+          ...newToggles,
+        }),
+      });
 
-      if (!error) {
-        setMembers(members.filter((m) => m.user_id !== memberId));
-        onMemberRemoved();
+      if (response.ok) {
+        const data = await response.json();
+        const { data: newLink } = await supabase
+          .from('vehicle_share_links')
+          .select('*')
+          .eq('id', data.id)
+          .single();
+
+        if (newLink) {
+          setShareLinks(prev => [newLink as VehicleShareLink, ...prev]);
+        }
+        setNewLinkName('');
+        setNewToggles({ ...DEFAULT_TOGGLES });
       }
     } finally {
-      setRemovingMember(null);
+      setCreating(false);
     }
   };
 
   const toggleShareLink = async (linkId: string, currentActive: boolean) => {
     setTogglingLink(linkId);
     try {
-      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+      const response = await fetch(`/api/vehicles/share-link/${linkId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !currentActive }),
@@ -172,7 +108,7 @@ export function MembersModal({
 
     setDeletingLink(linkId);
     try {
-      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+      const response = await fetch(`/api/vehicles/share-link/${linkId}`, {
         method: 'DELETE',
       });
 
@@ -185,13 +121,13 @@ export function MembersModal({
   };
 
   const copyShareUrl = async (token: string, linkId: string) => {
-    const url = `${window.location.origin}/share/${token}`;
+    const url = `${window.location.origin}/share/vehicle/${token}`;
     await navigator.clipboard.writeText(url);
     setCopiedLinkId(linkId);
     setTimeout(() => setCopiedLinkId(null), 2000);
   };
 
-  const startEditingName = (link: CollectionShareLink) => {
+  const startEditingName = (link: VehicleShareLink) => {
     setEditingLinkId(link.id);
     setEditingName(link.name || '');
   };
@@ -199,7 +135,7 @@ export function MembersModal({
   const saveLinkName = async (linkId: string) => {
     setSavingName(true);
     try {
-      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+      const response = await fetch(`/api/vehicles/share-link/${linkId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editingName }),
@@ -216,7 +152,7 @@ export function MembersModal({
     }
   };
 
-  const startEditingVisibility = (link: CollectionShareLink) => {
+  const startEditingVisibility = (link: VehicleShareLink) => {
     setEditingVisibilityId(link.id);
     const toggles: ShareLinkToggles = {} as ShareLinkToggles;
     for (const { key } of TOGGLE_LABELS) {
@@ -228,7 +164,7 @@ export function MembersModal({
   const saveVisibility = async (linkId: string) => {
     setSavingVisibility(true);
     try {
-      const response = await fetch(`/api/collections/share-link/${linkId}`, {
+      const response = await fetch(`/api/vehicles/share-link/${linkId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingToggles),
@@ -251,10 +187,8 @@ export function MembersModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
-            <h2 className="font-semibold text-lg">{collectionName}</h2>
-            <p className="text-sm text-muted-foreground">
-              {members.length} member{members.length !== 1 ? 's' : ''}
-            </p>
+            <h2 className="font-semibold text-lg">Share Vehicle</h2>
+            <p className="text-sm text-muted-foreground truncate">{vehicleName}</p>
           </div>
           <button
             onClick={onClose}
@@ -264,66 +198,42 @@ export function MembersModal({
           </button>
         </div>
 
-        {/* Member list */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {/* Create section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">Create New Link</h3>
+            <input
+              type="text"
+              value={newLinkName}
+              onChange={(e) => setNewLinkName(e.target.value)}
+              placeholder="Link name (optional)"
+              className="w-full px-3 py-2 border border-border bg-background text-sm focus:outline-none focus:border-primary"
+              maxLength={100}
+            />
+            <VisibilityToggles
+              values={newToggles}
+              onChange={(key, value) => setNewToggles(prev => ({ ...prev, [key]: value }))}
+            />
+            <button
+              onClick={createShareLink}
+              disabled={creating}
+              className="w-full py-2 bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {creating ? 'Creating...' : 'Create Share Link'}
+            </button>
+          </div>
+
+          {/* Info text */}
+          <p className="text-xs text-muted-foreground">
+            Photos, year/make/model, nickname, vehicle type, status, and sale info are always shown. Toggle other fields above.
+          </p>
+
+          {/* Existing links */}
           {loading ? (
             <p className="text-muted-foreground text-center py-4">Loading...</p>
-          ) : members.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">No members</p>
-          ) : (
-            <div className="space-y-2">
-              {members.map((member) => (
-                <div
-                  key={member.user_id}
-                  className="flex items-center justify-between py-3 px-2 border-b border-border last:border-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">
-                      {member.isCurrentUser
-                        ? 'You'
-                        : member.username || member.email?.split('@')[0] || 'Unknown'}
-                    </div>
-                    {member.email && !member.isCurrentUser && (
-                      <div className="text-sm text-muted-foreground truncate">
-                        {member.email}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded ${
-                        member.role === 'owner'
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {member.role}
-                    </span>
-                    {member.intended_role === 'editor' && member.role === 'viewer' && (
-                      <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                        pending editor
-                      </span>
-                    )}
-                    {isOwner && member.role !== 'owner' && (
-                      <button
-                        onClick={() => removeMember(member.user_id)}
-                        disabled={removingMember === member.user_id}
-                        className="p-1.5 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50"
-                        title="Remove member"
-                      >
-                        <UserMinusIcon className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Share Links Section (owner and editors) */}
-          {canManageLinks && !loading && shareLinks.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-border">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Share Links</h3>
+          ) : shareLinks.length > 0 && (
+            <div className="pt-4 border-t border-border">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">Existing Links</h3>
               <div className="space-y-3">
                 {shareLinks.map((link) => (
                   <div
@@ -379,9 +289,11 @@ export function MembersModal({
                           </div>
                         )}
                         <div className="text-xs font-mono truncate text-muted-foreground">
-                          /share/{link.token.slice(0, 8)}...
+                          /share/vehicle/{link.token.slice(0, 8)}...
                         </div>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`text-xs px-2 py-0.5 rounded shrink-0 ${
                           link.is_active
@@ -391,6 +303,12 @@ export function MembersModal({
                       >
                         {link.is_active ? 'active' : 'disabled'}
                       </span>
+                      {link.last_accessed_at && (
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          Viewed {new Date(link.last_accessed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      <div className="flex-1" />
                       <button
                         onClick={() => editingVisibilityId === link.id ? setEditingVisibilityId(null) : startEditingVisibility(link)}
                         className="text-xs px-2 py-1 border border-border hover:bg-muted rounded transition-colors shrink-0 flex items-center gap-1"

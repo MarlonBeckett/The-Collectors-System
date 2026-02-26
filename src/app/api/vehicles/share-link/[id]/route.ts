@@ -7,28 +7,36 @@ interface RouteContext {
 
 async function verifyShareLinkAccess(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, shareLinkId: string) {
   const { data: shareLink } = await supabase
-    .from('collection_share_links')
-    .select('id, collection_id')
+    .from('vehicle_share_links')
+    .select('id, motorcycle_id')
     .eq('id', shareLinkId)
     .single();
 
   if (!shareLink) return { error: 'Share link not found', status: 404 };
 
+  // Get the vehicle's collection
+  const { data: vehicle } = await supabase
+    .from('motorcycles')
+    .select('collection_id')
+    .eq('id', shareLink.motorcycle_id)
+    .single();
+
+  if (!vehicle || !vehicle.collection_id) return { error: 'Not authorized', status: 403 };
+
   const { data: collection } = await supabase
     .from('collections')
     .select('owner_id')
-    .eq('id', shareLink.collection_id)
+    .eq('id', vehicle.collection_id)
     .single();
 
   if (!collection) return { error: 'Not authorized', status: 403 };
 
   if (collection.owner_id === userId) return { shareLink };
 
-  // Check if user is an editor
   const { data: membership } = await supabase
     .from('collection_members')
     .select('role')
-    .eq('collection_id', shareLink.collection_id)
+    .eq('collection_id', vehicle.collection_id)
     .eq('user_id', userId)
     .single();
 
@@ -70,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     const { error: updateError } = await supabase
-      .from('collection_share_links')
+      .from('vehicle_share_links')
       .update(updates)
       .eq('id', id);
 
@@ -80,7 +88,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Update share link error:', error);
+    console.error('Update vehicle share link error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -101,7 +109,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
     }
 
     const { error: deleteError } = await supabase
-      .from('collection_share_links')
+      .from('vehicle_share_links')
       .delete()
       .eq('id', id);
 
@@ -111,7 +119,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete share link error:', error);
+    console.error('Delete vehicle share link error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

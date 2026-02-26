@@ -45,7 +45,6 @@ interface VehicleJsonData {
     tab_expiration?: string | null;
     purchase_price?: number | null;
     purchase_date?: string | null;
-    estimated_value?: number | null;
     sale_info?: {
       type?: string;
       date?: string;
@@ -83,12 +82,6 @@ interface VehicleJsonData {
   mileage_history?: {
     mileage: number;
     recorded_date: string;
-    notes?: string | null;
-  }[];
-  value_history?: {
-    estimated_value: number;
-    recorded_date: string;
-    source?: string | null;
     notes?: string | null;
   }[];
 }
@@ -226,7 +219,6 @@ export function VehicleZipImport({ collections, collectionCapacity }: VehicleZip
         tab_expiration: formatDateForDB(tabExpDate),
         purchase_price: v.purchase_price || null,
         purchase_date: formatDateForDB(purchaseDate),
-        estimated_value: v.estimated_value || null,
         sale_info: v.sale_info || null,
         collection_id: selectedCollectionId,
       }).select('id').single();
@@ -398,24 +390,6 @@ export function VehicleZipImport({ collections, collectionCapacity }: VehicleZip
         }
       }
 
-      // Import value history
-      if (jsonData.value_history && jsonData.value_history.length > 0) {
-        setImportProgress('Importing value history...');
-        for (const vh of jsonData.value_history) {
-          const recordedDate = vh.recorded_date
-            ? formatDateForDB(parseFlexibleDate(vh.recorded_date)) || new Date().toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0];
-
-          await supabase.from('value_history').insert({
-            motorcycle_id: vehicleId,
-            estimated_value: vh.estimated_value,
-            recorded_date: recordedDate,
-            source: vh.source || null,
-            notes: vh.notes || null,
-          });
-        }
-      }
-
       setDone(true);
       router.push(`/vehicles/${vehicleId}`);
     } catch (err) {
@@ -442,7 +416,6 @@ export function VehicleZipImport({ collections, collectionCapacity }: VehicleZip
     const serviceCt = jsonData.service_records?.length || 0;
     const docCt = jsonData.documents?.length || 0;
     const mileageCt = jsonData.mileage_history?.length || 0;
-    const valueCt = jsonData.value_history?.length || 0;
     const receiptCt = zipFiles.receipts.length;
     const docFileCt = zipFiles.documents.length;
 
@@ -459,7 +432,6 @@ export function VehicleZipImport({ collections, collectionCapacity }: VehicleZip
             {docCt > 0 && <p>{docCt} document{docCt !== 1 ? 's' : ''}{docFileCt > 0 ? ` (${docFileCt} file${docFileCt !== 1 ? 's' : ''})` : ''}</p>}
             {receiptCt > 0 && <p>{receiptCt} receipt file{receiptCt !== 1 ? 's' : ''}</p>}
             {mileageCt > 0 && <p>{mileageCt} mileage entr{mileageCt !== 1 ? 'ies' : 'y'}</p>}
-            {valueCt > 0 && <p>{valueCt} value history entr{valueCt !== 1 ? 'ies' : 'y'}</p>}
           </div>
         </div>
 

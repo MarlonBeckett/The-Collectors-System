@@ -71,7 +71,6 @@ interface PreviewRow {
     status: string;
     sale_info: object | null;
     maintenance_notes: string | null;
-    estimated_value: number | null;
     sale_info_type: string | null;
     sale_info_date: string | null;
     sale_info_amount: number | null;
@@ -567,7 +566,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
             notes: null, tab_expiration: null,
             nickname: null, vehicle_type: 'motorcycle', purchase_price: null,
             purchase_date: null, status: 'active', sale_info: null,
-            maintenance_notes: null, estimated_value: null,
+            maintenance_notes: null,
             sale_info_type: null, sale_info_date: null, sale_info_amount: null, sale_info_notes: null,
           },
           valid: false,
@@ -580,13 +579,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
       if (ppStr) {
         const parsed = parseFloat(ppStr.replace(/[$,]/g, ''));
         if (!isNaN(parsed)) purchasePrice = parsed;
-      }
-
-      const evStr = row.estimated_value?.trim();
-      let estimatedValue: number | null = null;
-      if (evStr) {
-        const parsed = parseFloat(evStr.replace(/[$,]/g, ''));
-        if (!isNaN(parsed)) estimatedValue = parsed;
       }
 
       const saAmtStr = row.sale_info_amount?.trim();
@@ -637,7 +629,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           status,
           sale_info: saleInfo,
           maintenance_notes: row.maintenance_notes?.trim() || null,
-          estimated_value: estimatedValue,
           sale_info_type: row.sale_info_type?.trim() || null,
           sale_info_date: row.sale_info_date?.trim() || null,
           sale_info_amount: saleInfoAmount,
@@ -798,7 +789,7 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
             notes: null, tab_expiration: null,
             nickname: null, vehicle_type: 'motorcycle', purchase_price: null,
             purchase_date: null, status: 'active', sale_info: null,
-            maintenance_notes: null, estimated_value: null,
+            maintenance_notes: null,
             sale_info_type: null, sale_info_date: null, sale_info_amount: null, sale_info_notes: null,
           },
           valid: false,
@@ -861,7 +852,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           status,
           sale_info: saleInfo,
           maintenance_notes: mapping.maintenance_notes ? row[mapping.maintenance_notes]?.trim() || null : null,
-          estimated_value: null,
           sale_info_type: null, sale_info_date: null, sale_info_amount: null, sale_info_notes: null,
         },
         valid: true,
@@ -942,11 +932,6 @@ export function CSVImport({ collections, subscriptionInfo, onStepChange }: CSVIm
           maintenance_notes: row.mapped.maintenance_notes,
           collection_id: selectedCollectionId,
         };
-
-        // Add comprehensive-only fields
-        if (row.mapped.estimated_value != null) {
-          insertData.estimated_value = row.mapped.estimated_value;
-        }
 
         const { data, error } = await supabase.from('motorcycles').insert(insertData).select('id, make, model, sub_model, year').single();
 

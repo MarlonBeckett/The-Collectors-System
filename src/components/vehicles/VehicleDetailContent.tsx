@@ -11,7 +11,8 @@ import { MileageSection } from '@/components/vehicles/MileageSection';
 import { ServiceRecordsSection } from '@/components/vehicles/ServiceRecordsSection';
 import { DocumentsSection } from '@/components/vehicles/DocumentsSection';
 import Link from 'next/link';
-import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, ArrowLeftIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { VehicleShareModal } from '@/components/vehicles/VehicleShareModal';
 
 const vehicleTypeLabels: Record<VehicleType, string> = {
   motorcycle: 'Motorcycle',
@@ -48,6 +49,7 @@ export function VehicleDetailContent({
 }: VehicleDetailContentProps) {
   const hasPhotos = photos.length > 0;
   const [revealed, setRevealed] = useState(!hasPhotos);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Timeout fallback — 4s max wait, then show regardless
   useEffect(() => {
@@ -65,6 +67,14 @@ export function VehicleDetailContent({
   // as an absolute overlay until the first gallery photo fires onLoad.
   return (
     <div className="relative">
+      {showShareModal && (
+        <VehicleShareModal
+          motorcycleId={vehicle.id}
+          vehicleName={getVehicleDisplayName(vehicle)}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
+
       {/* Skeleton overlay — covers content until first image loads */}
       {!revealed && (
         <div className="absolute inset-0 z-10 bg-background">
@@ -85,13 +95,22 @@ export function VehicleDetailContent({
               <span>Back</span>
             </Link>
             {canEdit && (
-              <Link
-                href={`/vehicles/${vehicle.id}/edit`}
-                className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:opacity-90"
-              >
-                <PencilIcon className="w-4 h-4" />
-                <span>Edit</span>
-              </Link>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 border border-border hover:bg-muted transition-colors"
+                >
+                  <ShareIcon className="w-4 h-4" />
+                  <span>Share</span>
+                </button>
+                <Link
+                  href={`/vehicles/${vehicle.id}/edit`}
+                  className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground hover:opacity-90"
+                >
+                  <PencilIcon className="w-4 h-4" />
+                  <span>Edit</span>
+                </Link>
+              </div>
             )}
           </div>
 
