@@ -8,6 +8,7 @@ import { User } from '@supabase/supabase-js';
 import { Profile } from '@/types/database';
 import { CollectionSettings } from '@/components/settings/CollectionSettings';
 import { JoinCollection } from '@/components/settings/JoinCollection';
+import { ShareLinksSection } from '@/components/settings/ShareLinksSection';
 import DangerZone from '@/components/settings/DangerZone';
 import { createClient } from '@/lib/supabase/client';
 import { CircleStackIcon, PlusIcon, PencilIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline';
@@ -626,6 +627,11 @@ export function SettingsContent({
           </div>
         )}
       </section>
+
+      {/* Share Links */}
+      {collections.some(c => c.is_owner || c.role === 'editor') && (
+        <ShareLinksSection collections={collections} />
+      )}
 
       {/* Joined Collections Section */}
       {joinedCollections.length > 0 && (
