@@ -6,11 +6,13 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   HomeIcon,
+  BanknotesIcon,
   PlusCircleIcon,
   Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 import {
   HomeIcon as HomeIconSolid,
+  BanknotesIcon as BanknotesIconSolid,
   PlusCircleIcon as PlusCircleIconSolid,
   Cog6ToothIcon as Cog6ToothIconSolid,
 } from '@heroicons/react/24/solid';
@@ -25,6 +27,7 @@ interface NavItem {
 
 const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: HomeIcon, activeIcon: HomeIconSolid },
+  { href: '/expenses', label: 'Expenses', icon: BanknotesIcon, activeIcon: BanknotesIconSolid },
   { href: '/vehicles/new', label: 'Add', icon: PlusCircleIcon, activeIcon: PlusCircleIconSolid, requiresEditAccess: true },
   { href: '/settings', label: 'Settings', icon: Cog6ToothIcon, activeIcon: Cog6ToothIconSolid },
 ];

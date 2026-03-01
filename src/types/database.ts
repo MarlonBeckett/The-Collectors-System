@@ -139,8 +139,35 @@ export interface VehicleDocument {
   storage_path: string;
   file_name: string;
   file_type: string | null;
+  cost: number | null;
   created_at: string;
   created_by: string | null;
+}
+
+export type StandaloneExpenseCategory = 'service' | 'document' | 'purchase' | 'registration' | 'insurance' | 'fuel' | 'parking' | 'other';
+
+export interface Expense {
+  id: string;
+  motorcycle_id: string;
+  category: StandaloneExpenseCategory;
+  title: string;
+  cost: number;
+  expense_date: string;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export type ExpenseCategory = 'Service' | 'Purchase' | 'Registration' | 'Insurance' | 'Document' | 'Fuel' | 'Parking' | 'Other';
+
+export interface ExpenseLineItem {
+  id: string;
+  vehicleId: string;
+  vehicleName: string;
+  category: ExpenseCategory;
+  description: string;
+  cost: number;
+  date: string;
 }
 
 export interface ServiceRecord {
@@ -284,6 +311,11 @@ export interface Database {
         Row: VehicleDocument;
         Insert: Omit<VehicleDocument, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<VehicleDocument, 'id' | 'created_at'>>;
+      };
+      expenses: {
+        Row: Expense;
+        Insert: Omit<Expense, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<Expense, 'id' | 'created_at'>>;
       };
       collections: {
         Row: Collection;

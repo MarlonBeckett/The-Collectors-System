@@ -71,6 +71,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
   const [title, setTitle] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('other');
   const [expirationDate, setExpirationDate] = useState('');
+  const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -98,6 +99,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
     setTitle('');
     setDocumentType('other');
     setExpirationDate('');
+    setCost('');
     setNotes('');
     setSelectedFile(null);
     if (fileInputRef.current) {
@@ -109,6 +111,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
     setTitle(doc.title);
     setDocumentType(doc.document_type as DocumentType);
     setExpirationDate(doc.expiration_date || '');
+    setCost(doc.cost != null ? String(doc.cost) : '');
     setNotes(doc.notes || '');
   };
 
@@ -120,6 +123,8 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
 
     setLoading(true);
     try {
+      const parsedCost = cost ? parseFloat(cost.replace(/[,$]/g, '')) : null;
+
       if (editingId) {
         // Update existing document metadata only
         const { error } = await supabase
@@ -128,6 +133,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
             title: title.trim(),
             document_type: documentType,
             expiration_date: expirationDate || null,
+            cost: parsedCost && !isNaN(parsedCost) ? parsedCost : null,
             notes: notes.trim() || null,
           })
           .eq('id', editingId);
@@ -158,6 +164,7 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
             title: title.trim(),
             document_type: documentType,
             expiration_date: expirationDate || null,
+            cost: parsedCost && !isNaN(parsedCost) ? parsedCost : null,
             notes: notes.trim() || null,
             storage_path: fileName,
             file_name: selectedFile.name,
@@ -320,17 +327,32 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
             </select>
           </div>
 
-          {/* Row 2: Expiration Date */}
-          <div>
-            <label className="block text-sm text-muted-foreground mb-1">
-              Expiration Date (optional)
-            </label>
-            <input
-              type="date"
-              value={expirationDate}
-              onChange={(e) => setExpirationDate(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-            />
+          {/* Row 2: Expiration Date & Cost */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1">
+                Expiration Date (optional)
+              </label>
+              <input
+                type="date"
+                value={expirationDate}
+                onChange={(e) => setExpirationDate(e.target.value)}
+                className="w-full px-3 py-2 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1">
+                Cost (optional)
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                placeholder="$0.00"
+                className="w-full px-3 py-2 bg-background border border-input focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
+              />
+            </div>
           </div>
 
           {/* Row 3: Notes */}
@@ -397,6 +419,11 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
                       </div>
                     </button>
                     <div className="text-right flex-shrink-0">
+                      {doc.cost != null && (
+                        <div className="text-sm font-mono text-foreground">
+                          ${doc.cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      )}
                       {doc.expiration_date && (
                         <div className={`text-sm ${expired ? 'text-destructive' : expiringSoon ? 'text-destructive' : 'text-muted-foreground'}`}>
                           {expired ? 'Expired ' : expiringSoon ? 'Expires ' : 'Exp. '}
