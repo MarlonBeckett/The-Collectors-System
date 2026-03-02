@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
     const toggleKeys = [
       'include_vin', 'include_plate', 'include_purchase_info', 'include_tab_expiration',
       'include_notes', 'include_service_records', 'include_documents', 'include_mileage',
+      'include_expenses',
     ] as const;
     for (const key of toggleKeys) {
       if (typeof body[key] === 'boolean') toggleFields[key] = body[key];

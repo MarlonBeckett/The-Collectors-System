@@ -11,6 +11,7 @@ export const TOGGLE_LABELS: { key: keyof ShareLinkToggles; label: string; defaul
   { key: 'include_service_records', label: 'Service records', defaultValue: true },
   { key: 'include_documents', label: 'Documents', defaultValue: true },
   { key: 'include_mileage', label: 'Mileage history', defaultValue: true },
+  { key: 'include_expenses', label: 'Expenses', defaultValue: false },
 ];
 
 export const DEFAULT_TOGGLES: ShareLinkToggles = {
@@ -22,6 +23,7 @@ export const DEFAULT_TOGGLES: ShareLinkToggles = {
   include_service_records: true,
   include_documents: true,
   include_mileage: true,
+  include_expenses: false,
 };
 
 interface VisibilityTogglesProps {

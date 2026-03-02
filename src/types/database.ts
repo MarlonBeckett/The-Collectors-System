@@ -207,6 +207,7 @@ export interface ShareLinkToggles {
   include_service_records: boolean;
   include_documents: boolean;
   include_mileage: boolean;
+  include_expenses: boolean;
 }
 
 export interface CollectionShareLink extends ShareLinkToggles {

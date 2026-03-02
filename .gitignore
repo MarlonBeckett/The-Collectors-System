@@ -37,3 +37,9 @@ next-env.d.ts
 # IDE
 .idea
 .vscode
+
+# MCP / Claude
+.mcp.json
+mcp-server/
+src/app/api/mcp/
+src/lib/mcp/

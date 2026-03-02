@@ -1,8 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { notFound } from 'next/navigation';
-import { Motorcycle } from '@/types/database';
+import { Motorcycle, Expense } from '@/types/database';
 import { ShareShell } from '@/components/share/ShareShell';
 import { ShareVehicleList } from '@/components/share/ShareVehicleList';
+import { ShareExpenses } from '@/components/share/ShareExpenses';
 import type { Metadata } from 'next';
 
 interface SharePageProps {
@@ -43,7 +44,7 @@ export default async function SharePage({ params }: SharePageProps) {
   // Look up share link
   const { data: shareLink } = await supabase
     .from('collection_share_links')
-    .select('id, collection_id, is_active')
+    .select('id, collection_id, is_active, include_expenses, include_purchase_info')
     .eq('token', token)
     .single();
 
@@ -119,6 +120,36 @@ export default async function SharePage({ params }: SharePageProps) {
     }
   }
 
+  // Fetch expense data if enabled
+  let serviceRecords: { id: string; motorcycle_id: string; service_date: string; title: string; category: string; cost: number }[] = [];
+  let expenseDocuments: { id: string; motorcycle_id: string; title: string; document_type: string; cost: number; created_at: string }[] = [];
+  let standaloneExpenses: Expense[] = [];
+
+  if (shareLink.include_expenses && vehicleIds.length > 0) {
+    const [srResult, docResult, expResult] = await Promise.all([
+      supabase
+        .from('service_records')
+        .select('id, motorcycle_id, service_date, title, category, cost')
+        .in('motorcycle_id', vehicleIds)
+        .not('cost', 'is', null)
+        .gt('cost', 0),
+      supabase
+        .from('vehicle_documents')
+        .select('id, motorcycle_id, title, document_type, cost, created_at')
+        .in('motorcycle_id', vehicleIds)
+        .not('cost', 'is', null)
+        .gt('cost', 0),
+      supabase
+        .from('expenses')
+        .select('*')
+        .in('motorcycle_id', vehicleIds),
+    ]);
+
+    serviceRecords = (srResult.data || []) as typeof serviceRecords;
+    expenseDocuments = (docResult.data || []) as typeof expenseDocuments;
+    standaloneExpenses = (expResult.data || []) as Expense[];
+  }
+
   return (
     <ShareShell collectionName={collection.name}>
       <ShareVehicleList
@@ -126,6 +157,28 @@ export default async function SharePage({ params }: SharePageProps) {
         token={token}
         showcaseUrls={showcaseUrls}
       />
+      {shareLink.include_expenses && (
+        <div className="mt-8 border-t border-border pt-6">
+          <ShareExpenses
+            vehicles={vehicles.map(v => ({
+              id: v.id,
+              make: v.make,
+              model: v.model,
+              sub_model: v.sub_model,
+              nickname: v.nickname,
+              year: v.year,
+              vehicle_type: v.vehicle_type,
+              purchase_price: v.purchase_price,
+              purchase_date: v.purchase_date,
+              created_at: v.created_at,
+            }))}
+            serviceRecords={serviceRecords}
+            documents={expenseDocuments}
+            standaloneExpenses={standaloneExpenses}
+            includePurchaseInfo={shareLink.include_purchase_info}
+          />
+        </div>
+      )}
     </ShareShell>
   );
 }
