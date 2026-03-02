@@ -12,7 +12,6 @@ import {
   TrashIcon,
   XMarkIcon,
   DocumentIcon,
-  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 
@@ -39,19 +38,6 @@ const documentTypeColors: Record<DocumentType, string> = {
   receipt: 'bg-destructive/20 text-destructive',
   manual: 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-400',
   other: 'bg-gray-500/20 text-gray-600 dark:text-gray-400',
-};
-
-const isExpiringSoon = (date: string | null): boolean => {
-  if (!date) return false;
-  const expDate = new Date(date);
-  const now = new Date();
-  const daysUntil = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  return daysUntil <= 30 && daysUntil > 0;
-};
-
-const isExpired = (date: string | null): boolean => {
-  if (!date) return false;
-  return new Date(date) < new Date();
 };
 
 export function DocumentsSection({ motorcycleId, documents: initialDocuments, canEdit = true, initialUrls = {} }: DocumentsSectionProps) {
@@ -230,9 +216,6 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
     return fileType?.startsWith('image/');
   };
 
-  // Count expiration warnings
-  const expirationWarnings = documents.filter(d => isExpired(d.expiration_date) || isExpiringSoon(d.expiration_date)).length;
-
   const isFormOpen = isAdding || editingId;
 
   return (
@@ -259,12 +242,6 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
           <span className="text-muted-foreground">
             {documents.length} document{documents.length !== 1 ? 's' : ''}
           </span>
-          {expirationWarnings > 0 && (
-            <span className="flex items-center gap-1 text-destructive">
-              <ExclamationTriangleIcon className="w-4 h-4" />
-              {expirationWarnings} expiring
-            </span>
-          )}
         </div>
       )}
 
@@ -395,9 +372,6 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
             {documents.map((doc) => {
               const isExpanded = expandedId === doc.id;
               const isEditing = editingId === doc.id;
-              const expired = isExpired(doc.expiration_date);
-              const expiringSoon = isExpiringSoon(doc.expiration_date);
-
               return (
                 <div
                   key={doc.id}
@@ -425,9 +399,8 @@ export function DocumentsSection({ motorcycleId, documents: initialDocuments, ca
                         </div>
                       )}
                       {doc.expiration_date && (
-                        <div className={`text-sm ${expired ? 'text-destructive' : expiringSoon ? 'text-destructive' : 'text-muted-foreground'}`}>
-                          {expired ? 'Expired ' : expiringSoon ? 'Expires ' : 'Exp. '}
-                          {formatDate(doc.expiration_date)}
+                        <div className="text-sm text-muted-foreground">
+                          Exp. {formatDate(doc.expiration_date)}
                         </div>
                       )}
                     </div>
